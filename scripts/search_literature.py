@@ -87,11 +87,12 @@ def parse_simple_query_yaml(path: Path) -> dict[str, object]:
     }
     current_list = ""
     for raw_line in path.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
+        stripped = raw_line.strip()
         if stripped.startswith("topic:"):
             topic = stripped.split(":", 1)[1].strip()
-        elif stripped.endswith(":") and stripped[:-1] in lists:
-            current_list = stripped[:-1]
+            current_list = ""
+        elif stripped.endswith(":"):
+            current_list = stripped[:-1] if stripped[:-1] in lists else ""
         elif current_list and stripped.startswith("- "):
             lists[current_list].append(stripped[2:].strip())
         elif current_list and stripped and not raw_line.startswith(" "):
