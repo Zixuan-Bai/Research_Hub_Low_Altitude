@@ -1,0 +1,38 @@
+topic: remote_id_broadcast_capacity
+status: candidate
+description: UAV Remote ID-like direct broadcast, broadcast density, channel congestion, and safety boundary.
+
+seed_keywords:
+  - UAV Remote ID
+  - drone remote identification
+  - broadcast remote ID
+  - direct remote identification
+  - ASTM F3411
+  - drone density
+  - broadcast capacity
+  - wireless broadcast congestion
+  - C-V2X sidelink UAV
+  - ADS-B UAV scalability
+
+databases:
+  - IEEE Xplore
+  - ACM Digital Library
+  - arXiv
+  - Google Scholar
+  - Web of Science
+
+must_extract:
+  - problem setting
+  - communication mode
+  - broadcast frequency
+  - density assumption
+  - channel model
+  - interference model
+  - scalability limitation
+  - safety implication
+  - open problem
+
+exclude:
+  - pure regulation without technical model
+  - consumer drone product reports
+  - papers without capacity or scalability analysis

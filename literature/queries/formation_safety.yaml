@@ -1,0 +1,38 @@
+topic: formation_safety_boundary
+status: candidate
+description: Communication delay, packet loss, update cycle, uncertainty propagation, and safety/stability boundaries for UAV formation or swarm control.
+
+seed_keywords:
+  - UAV formation stability
+  - multi-UAV formation control communication delay
+  - packet loss formation control UAV
+  - consensus under communication delay
+  - swarm stability boundary
+  - critical noise multi-agent system
+  - Vicsek model noise transition
+  - risk-driven broadcast UAV
+  - state synchronization error propagation
+  - communication-aware formation control
+
+databases:
+  - IEEE Xplore
+  - ACM Digital Library
+  - arXiv
+  - Google Scholar
+  - Web of Science
+
+must_extract:
+  - stability condition
+  - communication model
+  - delay model
+  - packet loss model
+  - uncertainty representation
+  - safety boundary
+  - proof method
+  - simulation setting
+  - control policy
+
+exclude:
+  - formation papers without communication or uncertainty model
+  - pure mechanical control without network assumptions
+  - papers without stability or safety evidence

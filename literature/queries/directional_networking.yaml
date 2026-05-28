@@ -1,0 +1,38 @@
+topic: dynamic_directional_networking
+status: candidate
+description: Directional transmission, dynamic topology, clustering, beam selection, interference suppression, and spatial reuse in low-altitude aerial networks.
+
+seed_keywords:
+  - UAV directional networking
+  - FANET directional antenna
+  - UAV beamforming network
+  - dynamic topology UAV network
+  - aerial ad hoc network directional transmission
+  - UAV clustering directional communication
+  - beam selection UAV swarm
+  - topology prediction UAV network
+  - low altitude network spatial reuse
+  - directional MAC UAV
+
+databases:
+  - IEEE Xplore
+  - ACM Digital Library
+  - arXiv
+  - Google Scholar
+  - Web of Science
+
+must_extract:
+  - network model
+  - antenna or beam model
+  - topology dynamics
+  - clustering method
+  - routing or scheduling method
+  - interference model
+  - performance metrics
+  - scalability
+  - limitation
+
+exclude:
+  - static terrestrial directional networking without aerial mobility
+  - papers without topology or interference model
+  - pure antenna hardware papers without networking implication

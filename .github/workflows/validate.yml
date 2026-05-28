@@ -1,0 +1,36 @@
+name: Validate Hub
+
+on:
+  push:
+    paths:
+      - "docs/**"
+      - "literature/**"
+      - "prompts/**"
+      - "route_cards/**"
+      - "rubrics/**"
+      - "scripts/**"
+      - "topics/**"
+      - "AGENTS.md"
+      - "README.md"
+      - ".github/workflows/validate.yml"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate hub skeleton
+        run: python scripts/validate_hub.py
+      - name: Dry-run literature search
+        run: python scripts/search_literature.py --query-file literature/queries/remote_id.yaml --dry-run
+      - name: Dry-run OA PDF fetch
+        run: python scripts/fetch_open_access_pdfs.py --dry-run
+      - name: Dry-run local PDF import
+        run: python scripts/import_local_pdfs.py --dry-run
+      - name: Dry-run route check
+        run: python scripts/rank_routes.py --dry-run

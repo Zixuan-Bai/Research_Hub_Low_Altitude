@@ -1,0 +1,25 @@
+topic: dtmb_uav_control
+status: candidate
+description: Terrestrial broadcast or DTMB-like one-to-many downlink control for low-altitude UAV management.
+
+seed_keywords:
+  - DTMB
+  - digital terrestrial multimedia broadcasting
+  - UAV command and control
+  - broadcast control channel
+  - low altitude air traffic management
+  - terrestrial broadcast network UAV
+  - one-to-many UAV control
+  - emergency broadcast UAV
+  - cellular broadcast UAV control
+  - multicast UAV control
+
+must_extract:
+  - broadcast architecture
+  - downlink control capacity
+  - latency
+  - coverage
+  - reliability
+  - uplink feedback mechanism
+  - safety fallback
+  - relation to UTM or U-space
