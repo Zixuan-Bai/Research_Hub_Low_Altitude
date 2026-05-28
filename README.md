@@ -70,7 +70,14 @@ literature search
 
 ## 可运行检查
 
-第一版脚本只提供空流程和 dry-run：
+推荐的一键流程：
+
+```powershell
+python scripts/run_pipeline.py --dry-run
+python scripts/run_pipeline.py
+```
+
+基础检查：
 
 ```powershell
 python scripts/validate_hub.py
@@ -81,6 +88,8 @@ python scripts/rank_routes.py --dry-run
 ```
 
 这些脚本不会进行真实文献搜索，不会解析全文，也不会生成科学结论。
+
+自动化使用说明见 `docs/automation_workflow.md`。
 
 ## 工具说明
 

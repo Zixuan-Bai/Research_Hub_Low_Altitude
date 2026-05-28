@@ -1,0 +1,3 @@
+item_id,item_type,topic,title,reason,recommended_action,status,source_path,added_at
+f3c63e913697,paper_candidate,remote_id_broadcast_capacity,Use of LoRa for UAV Remote ID with Multi-User Interference and Different Spreading Factors,unknown venue tier,Audit venue quality before synthesis.,pending,literature\database\paper_candidates.csv,2026-05-28T08:09:51+00:00
+cca6eb589a23,paper_candidate,remote_id_broadcast_capacity,Use of LoRa for UAV Remote ID with Multi-User Interference and Different Spreading Factors,PDF requires user access,Download legally if institutional or personal access is available.,pending,literature\database\paper_candidates.csv,2026-05-28T08:09:51+00:00

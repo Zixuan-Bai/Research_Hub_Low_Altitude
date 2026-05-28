@@ -30,10 +30,13 @@
 
 当前已提供：
 
+- `scripts/run_pipeline.py`
+- `scripts/classify_candidates.py`
 - `scripts/search_literature.py`
 - `scripts/fetch_open_access_pdfs.py`
 - `literature/database/paper_candidates.csv`
 - `literature/database/acquisition_queue.csv`
+- `literature/database/review_queue.csv`
 
 ## Phase 2: PDF and Note Workflow
 

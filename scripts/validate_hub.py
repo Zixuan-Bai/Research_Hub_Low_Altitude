@@ -32,9 +32,11 @@ REQUIRED_FILES = [
     "docs/repository_boundary.md",
     "docs/mcp_skill_roadmap.md",
     "docs/tooling_guide.md",
+    "docs/automation_workflow.md",
     "literature/database/papers.csv",
     "literature/database/paper_candidates.csv",
     "literature/database/acquisition_queue.csv",
+    "literature/database/review_queue.csv",
     "literature/database/context_sources.csv",
     "literature/database/papers.bib",
     "literature/database/paper_index.jsonl",
@@ -67,10 +69,14 @@ REQUIRED_FILES = [
     "rubrics/practical_relevance_rubric.md",
     "scripts/import_local_pdfs.py",
     "scripts/search_literature.py",
+    "scripts/classify_candidates.py",
+    "scripts/run_pipeline.py",
     "scripts/fetch_open_access_pdfs.py",
     "scripts/rank_routes.py",
     "scripts/validate_hub.py",
     ".github/workflows/validate.yml",
+    ".github/workflows/literature_pipeline.yml",
+    "configs/pipeline.json",
 ]
 
 ALLOWED_EMPTY_FILES = {

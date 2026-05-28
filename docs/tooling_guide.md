@@ -16,6 +16,7 @@
 - import local PDFs；
 - record practical context sources；
 - generate route-card completeness checks。
+- run the unattended pipeline and generate a compact review queue.
 
 这是最应该优先建设的部分，因为它可复现、可审查、可提交到 GitHub。
 
@@ -53,6 +54,7 @@ MCP 配置通常属于本地运行环境，不应把 API key 或 secret 放进�
 
 ```powershell
 python scripts/validate_hub.py
+python scripts/run_pipeline.py --dry-run
 python scripts/search_literature.py --query-file literature/queries/remote_id.yaml --dry-run
 python scripts/fetch_open_access_pdfs.py --dry-run
 python scripts/import_local_pdfs.py --dry-run
@@ -62,6 +64,8 @@ python scripts/rank_routes.py --dry-run
 如果这些流程稳定，再接 MCP。
 
 当前阶段的核心规则是：先建立 source-quality-first 和 practical-context-first 的 repo 流程，再扩大自动化范围。
+
+日常使用优先运行 `python scripts/run_pipeline.py`，不要逐个脚本手动执行。
 
 ## 3. 推荐接入顺序
 

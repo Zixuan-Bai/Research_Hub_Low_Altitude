@@ -26,6 +26,8 @@ jobs:
           python-version: "3.11"
       - name: Validate hub skeleton
         run: python scripts/validate_hub.py
+      - name: Dry-run unattended pipeline
+        run: python scripts/run_pipeline.py --dry-run
       - name: Dry-run literature search
         run: python scripts/search_literature.py --query-file literature/queries/remote_id.yaml --dry-run
       - name: Dry-run OA PDF fetch

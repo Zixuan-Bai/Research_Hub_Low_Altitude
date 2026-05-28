@@ -1,0 +1,12 @@
+{
+  "default_provider": "openalex",
+  "limit_per_keyword": 10,
+  "max_keywords_per_topic": 4,
+  "download_open_access_pdfs": false,
+  "topics": {
+    "remote_id": "literature/queries/remote_id.yaml",
+    "dtmb": "literature/queries/dtmb_broadcast.yaml",
+    "formation_safety": "literature/queries/formation_safety.yaml",
+    "directional_networking": "literature/queries/directional_networking.yaml"
+  }
+}
