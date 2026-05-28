@@ -14,6 +14,24 @@ seed_keywords:
   - state synchronization error propagation
   - communication-aware formation control
 
+required_terms_any:
+  - UAV
+  - UAS
+  - drone
+  - unmanned aircraft
+  - formation
+  - swarm
+  - consensus
+  - multi-agent
+  - communication delay
+  - packet loss
+
+exclude_terms_any:
+  - human formation
+  - protein
+  - geology
+  - crystallization
+
 databases:
   - IEEE Xplore
   - ACM Digital Library

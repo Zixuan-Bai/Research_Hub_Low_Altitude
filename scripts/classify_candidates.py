@@ -24,6 +24,8 @@ CANDIDATE_FIELDS = [
     "venue_tier",
     "source_trust",
     "query",
+    "auto_relevance_score",
+    "auto_relevance_label",
     "category",
     "relevance_reason",
     "practical_relevance",

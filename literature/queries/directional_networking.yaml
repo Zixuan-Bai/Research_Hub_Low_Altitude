@@ -14,6 +14,24 @@ seed_keywords:
   - low altitude network spatial reuse
   - directional MAC UAV
 
+required_terms_any:
+  - UAV
+  - UAS
+  - drone
+  - unmanned aircraft
+  - FANET
+  - aerial
+  - directional
+  - beam
+  - beamforming
+  - antenna
+
+exclude_terms_any:
+  - social network
+  - brain network
+  - road network
+  - unrelated graph
+
 databases:
   - IEEE Xplore
   - ACM Digital Library

@@ -14,6 +14,28 @@ seed_keywords:
   - C-V2X sidelink UAV
   - ADS-B UAV scalability
 
+required_terms_any:
+  - UAV
+  - UAS
+  - drone
+  - unmanned aircraft
+  - Remote ID
+  - remote identification
+  - DRIP
+  - broadcast remote ID
+
+exclude_terms_any:
+  - remote sensing
+  - earth remote sensing
+  - hyperspectral
+  - marine mammal
+  - diet analysis
+  - chlamydia
+  - Parkinson
+  - soil erosion
+  - remote agent
+  - GroupLens
+
 databases:
   - IEEE Xplore
   - ACM Digital Library

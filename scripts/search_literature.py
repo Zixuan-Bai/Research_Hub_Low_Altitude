@@ -36,6 +36,8 @@ CANDIDATE_FIELDS = [
     "venue_tier",
     "source_trust",
     "query",
+    "auto_relevance_score",
+    "auto_relevance_label",
     "category",
     "relevance_reason",
     "practical_relevance",
@@ -76,24 +78,27 @@ def normalize_space(value: str) -> str:
     return re.sub(r"\s+", " ", value or "").strip()
 
 
-def parse_simple_query_yaml(path: Path) -> tuple[str, list[str]]:
+def parse_simple_query_yaml(path: Path) -> dict[str, object]:
     topic = ""
-    keywords: list[str] = []
-    in_seed_keywords = False
+    lists: dict[str, list[str]] = {
+        "seed_keywords": [],
+        "required_terms_any": [],
+        "exclude_terms_any": [],
+    }
+    current_list = ""
     for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.rstrip()
         stripped = line.strip()
         if stripped.startswith("topic:"):
             topic = stripped.split(":", 1)[1].strip()
-        elif stripped == "seed_keywords:":
-            in_seed_keywords = True
-        elif in_seed_keywords and stripped.startswith("- "):
-            keywords.append(stripped[2:].strip())
-        elif in_seed_keywords and stripped and not raw_line.startswith(" "):
-            in_seed_keywords = False
+        elif stripped.endswith(":") and stripped[:-1] in lists:
+            current_list = stripped[:-1]
+        elif current_list and stripped.startswith("- "):
+            lists[current_list].append(stripped[2:].strip())
+        elif current_list and stripped and not raw_line.startswith(" "):
+            current_list = ""
     if not topic:
         topic = path.stem
-    return topic, keywords
+    return {"topic": topic, **lists}
 
 
 def load_csv(path: Path, fields: list[str]) -> list[dict[str, str]]:
@@ -216,6 +221,8 @@ def make_candidate(title: str, authors: str, year: str, venue: str, doi: str, ur
         "venue_tier": "unknown",
         "source_trust": "medium",
         "query": query,
+        "auto_relevance_score": "",
+        "auto_relevance_label": "",
         "category": "",
         "relevance_reason": "",
         "practical_relevance": "",
@@ -225,6 +232,40 @@ def make_candidate(title: str, authors: str, year: str, venue: str, doi: str, ur
         "metadata_confidence": "medium" if title and year else "low",
         "added_at": now_iso(),
     }
+
+
+def text_contains_any(text: str, terms: list[str]) -> bool:
+    lowered = text.lower()
+    return any(term.lower() in lowered for term in terms if term)
+
+
+def relevance_score(row: dict[str, str], required_terms: list[str], excluded_terms: list[str]) -> tuple[int, str, str]:
+    text = " ".join([row.get("title", ""), row.get("venue", ""), row.get("query", "")]).lower()
+    if excluded_terms and text_contains_any(text, excluded_terms):
+        return 0, "excluded", "matched excluded term"
+    if required_terms:
+        matched = [term for term in required_terms if term.lower() in text]
+        if not matched:
+            return 0, "off_topic", "no required topic term matched"
+        score = len(matched)
+    else:
+        score = 1
+    label = "high" if score >= 2 else "medium"
+    return score, label, "auto topic gate"
+
+
+def apply_relevance_gate(rows: list[dict[str, str]], required_terms: list[str], excluded_terms: list[str]) -> list[dict[str, str]]:
+    kept = []
+    for row in rows:
+        score, label, reason = relevance_score(row, required_terms, excluded_terms)
+        if label in {"excluded", "off_topic"}:
+            continue
+        row["auto_relevance_score"] = str(score)
+        row["auto_relevance_label"] = label
+        if not row.get("relevance_reason"):
+            row["relevance_reason"] = reason
+        kept.append(row)
+    return kept
 
 
 def dedupe(rows: Iterable[dict[str, str]]) -> list[dict[str, str]]:
@@ -281,7 +322,11 @@ def main() -> int:
         print(f"Missing query file: {query_file}")
         return 1
 
-    topic, keywords = parse_simple_query_yaml(query_file)
+    query_data = parse_simple_query_yaml(query_file)
+    topic = str(query_data["topic"])
+    keywords = list(query_data["seed_keywords"])
+    required_terms = list(query_data["required_terms_any"])
+    excluded_terms = list(query_data["exclude_terms_any"])
     selected_keywords = keywords[: args.max_keywords]
     if not selected_keywords:
         print(f"No seed keywords found in {query_file}.")
@@ -308,7 +353,7 @@ def main() -> int:
         except Exception as exc:
             print(f"Search failed for '{keyword}' via {args.provider}: {exc}", file=sys.stderr)
 
-    candidates = dedupe(candidates)
+    candidates = apply_relevance_gate(dedupe(candidates), required_terms, excluded_terms)
     if not candidates:
         print("No candidates found.")
         return 0

@@ -14,6 +14,23 @@ seed_keywords:
   - cellular broadcast UAV control
   - multicast UAV control
 
+required_terms_any:
+  - DTMB
+  - UAV
+  - UAS
+  - drone
+  - unmanned aircraft
+  - low altitude
+  - UTM
+  - U-space
+  - broadcast control
+  - multicast
+
+exclude_terms_any:
+  - television drama
+  - consumer product
+  - unrelated broadcast media
+
 must_extract:
   - broadcast architecture
   - downlink control capacity
