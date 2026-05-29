@@ -2,6 +2,13 @@
 
 ## Route ID
 
+## Route Version
+
+- route_version:
+- last_refreshed_at:
+- generated_from_evidence_version:
+- human_decision: needs_human_review
+
 ## Candidate Title
 
 ## Parent Topic

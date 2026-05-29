@@ -16,6 +16,15 @@
 - Relevance: high / medium / low
 - Metadata confidence: high / medium / low
 
+## Reading Provenance
+
+- Reading model:
+- Read at:
+- PDF fingerprint:
+- PDF source:
+- Reading revision:
+- Human reviewed: no
+
 ## Problem
 
 What problem does the paper study?
@@ -32,9 +41,23 @@ What assumptions are made?
 
 What experiments, proofs, measurements, simulations, or case studies are provided?
 
+## Visual Evidence
+
+What figures, tables, architecture diagrams, experiment curves, or parameter tables matter?
+
 ## Limitations
 
 What does it not solve?
+
+## Reusable Knowledge
+
+- Model:
+- Parameters:
+- Baselines:
+- Metrics:
+- Dataset / simulator:
+- Assumptions:
+- Limitations:
 
 ## Useful For This Hub
 
@@ -57,6 +80,10 @@ Mark each note as one of:
 - `inferred`
 - `proposal`
 - `unsupported`
+
+## Claims Ledger
+
+List reusable claims with page, figure, or table pointers when available. Do not copy full-text passages.
 
 ## Practicality Check
 

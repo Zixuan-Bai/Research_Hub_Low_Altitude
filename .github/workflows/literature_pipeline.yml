@@ -26,7 +26,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Run unattended literature pipeline
-        run: python scripts/run_pipeline.py --topic "${{ github.event_name == 'workflow_dispatch' && inputs.topic || 'all' }}"
+        run: python scripts/run_discovery_pipeline.py --topic "${{ github.event_name == 'workflow_dispatch' && inputs.topic || 'all' }}" --write-digest
       - name: Check for changes
         id: changes
         shell: bash
@@ -46,11 +46,11 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           branch="automation/literature-pipeline-${{ github.run_id }}"
           git checkout -b "$branch"
-          git add literature/database/*.csv
+          git add literature/database/*.csv outputs/weekly/*.md
           git commit -m "Update automated literature pipeline outputs"
           git push -u origin "$branch"
           gh pr create \
             --title "Update automated literature pipeline outputs" \
-            --body "Automated literature metadata search and source-quality review queue update. Review literature/database/review_queue.csv before merging." \
+            --body "Automated literature metadata search, source-quality review queue, and weekly digest update. Review outputs/weekly/ and literature/database/review_queue.csv before merging." \
             --base main \
             --head "$branch"

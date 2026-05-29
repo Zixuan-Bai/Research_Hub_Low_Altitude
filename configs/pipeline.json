@@ -1,8 +1,37 @@
 {
   "default_provider": "openalex",
+  "discovery_providers": [
+    "openalex",
+    "crossref",
+    "arxiv",
+    "semantic_scholar"
+  ],
   "limit_per_keyword": 10,
   "max_keywords_per_topic": 4,
   "download_open_access_pdfs": false,
+  "weekly_digest": true,
+  "reading": {
+    "provider": "openai",
+    "model_env": "OPENAI_READING_MODEL",
+    "default_model": "gpt-5.5",
+    "max_papers_per_run": 5,
+    "human_review_required": true
+  },
+  "notion": {
+    "enabled": false,
+    "mode": "review_surface",
+    "databases": [
+      "Paper Inbox",
+      "Download Queue",
+      "Reading Queue",
+      "Evidence Map Board",
+      "Route Review Board"
+    ]
+  },
+  "zotero": {
+    "enabled": false,
+    "role": "pdf_and_library_manager"
+  },
   "topics": {
     "remote_id": "literature/queries/remote_id.yaml",
     "dtmb": "literature/queries/dtmb_broadcast.yaml",

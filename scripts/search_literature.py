@@ -10,6 +10,7 @@ import argparse
 import csv
 import hashlib
 import json
+import os
 import re
 import sys
 import time
@@ -46,6 +47,14 @@ CANDIDATE_FIELDS = [
     "access_status",
     "metadata_confidence",
     "added_at",
+    "first_seen_at",
+    "last_seen_at",
+    "source_updated_at",
+    "discovery_run_id",
+    "status",
+    "human_decision",
+    "notion_status",
+    "zotero_key",
 ]
 
 QUEUE_FIELDS = [
@@ -130,8 +139,11 @@ def fetch_text(url: str) -> str:
         return response.read().decode("utf-8")
 
 
-def search_openalex(query: str, topic: str, limit: int) -> list[dict[str, str]]:
-    params = urllib.parse.urlencode({"search": query, "per-page": limit})
+def search_openalex(query: str, topic: str, limit: int, from_updated_date: str = "") -> list[dict[str, str]]:
+    params_data = {"search": query, "per-page": limit}
+    if from_updated_date:
+        params_data["filter"] = f"from_updated_date:{from_updated_date}"
+    params = urllib.parse.urlencode(params_data)
     data = fetch_json(f"https://api.openalex.org/works?{params}")
     rows = []
     for item in data.get("results", []):
@@ -155,12 +167,15 @@ def search_openalex(query: str, topic: str, limit: int) -> list[dict[str, str]]:
         primary_location = item.get("primary_location") or {}
         primary_source = primary_location.get("source") or {}
         venue = primary_source.get("display_name", "")
-        rows.append(make_candidate(title, authors, str(item.get("publication_year") or ""), venue, doi, url, pdf_url, topic, "openalex", query, access_status))
+        rows.append(make_candidate(title, authors, str(item.get("publication_year") or ""), venue, doi, url, pdf_url, topic, "openalex", query, access_status, item.get("updated_date", "")))
     return rows
 
 
-def search_crossref(query: str, topic: str, limit: int) -> list[dict[str, str]]:
-    params = urllib.parse.urlencode({"query": query, "rows": limit})
+def search_crossref(query: str, topic: str, limit: int, from_updated_date: str = "") -> list[dict[str, str]]:
+    params_data = {"query": query, "rows": limit}
+    if from_updated_date:
+        params_data["filter"] = f"from-update-date:{from_updated_date}"
+    params = urllib.parse.urlencode(params_data)
     data = fetch_json(f"https://api.crossref.org/works?{params}")
     rows = []
     for item in data.get("message", {}).get("items", []):
@@ -176,11 +191,12 @@ def search_crossref(query: str, topic: str, limit: int) -> list[dict[str, str]]:
         venue = normalize_space("; ".join(item.get("container-title") or []))
         doi = item.get("DOI", "")
         url = item.get("URL", "")
-        rows.append(make_candidate(title, authors, year, venue, doi, url, "", topic, "crossref", query, "needs_user_pdf"))
+        indexed = item.get("indexed", {}).get("date-time", "")
+        rows.append(make_candidate(title, authors, year, venue, doi, url, "", topic, "crossref", query, "needs_user_pdf", indexed))
     return rows
 
 
-def search_arxiv(query: str, topic: str, limit: int) -> list[dict[str, str]]:
+def search_arxiv(query: str, topic: str, limit: int, from_updated_date: str = "") -> list[dict[str, str]]:
     search_query = urllib.parse.quote(f'all:"{query}"')
     url = f"https://export.arxiv.org/api/query?search_query={search_query}&start=0&max_results={limit}"
     text = fetch_text(url)
@@ -196,17 +212,62 @@ def search_arxiv(query: str, topic: str, limit: int) -> list[dict[str, str]]:
         published = entry.findtext("atom:published", default="", namespaces=ns)
         year = published[:4] if published else ""
         entry_url = entry.findtext("atom:id", default="", namespaces=ns)
+        updated = entry.findtext("atom:updated", default="", namespaces=ns)
         pdf_url = ""
         for link in entry.findall("atom:link", ns):
             if link.attrib.get("title") == "pdf":
                 pdf_url = link.attrib.get("href", "")
-        rows.append(make_candidate(title, authors, year, "arXiv", "", entry_url, pdf_url, topic, "arxiv", query, "open"))
+        rows.append(make_candidate(title, authors, year, "arXiv", "", entry_url, pdf_url, topic, "arxiv", query, "open", updated))
     return rows
 
 
-def make_candidate(title: str, authors: str, year: str, venue: str, doi: str, url: str, pdf_url: str, topic: str, source: str, query: str, access_status: str) -> dict[str, str]:
+def search_semantic_scholar(query: str, topic: str, limit: int, from_updated_date: str = "") -> list[dict[str, str]]:
+    fields = "title,authors,year,venue,externalIds,url,openAccessPdf,publicationDate"
+    params = urllib.parse.urlencode({"query": query, "limit": limit, "fields": fields})
+    headers = {"User-Agent": "low-altitude-research-hub/0.1"}
+    api_key = os.environ.get("SEMANTIC_SCHOLAR_API_KEY", "")
+    if api_key:
+        headers["x-api-key"] = api_key
+    request = urllib.request.Request(
+        f"https://api.semanticscholar.org/graph/v1/paper/search?{params}",
+        headers=headers,
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        data = json.loads(response.read().decode("utf-8"))
+    rows = []
+    for item in data.get("data", []):
+        publication_date = item.get("publicationDate", "")
+        if from_updated_date and publication_date and publication_date < from_updated_date:
+            continue
+        authors = "; ".join(normalize_space(author.get("name", "")) for author in item.get("authors", []) if author.get("name"))
+        external_ids = item.get("externalIds") or {}
+        doi = external_ids.get("DOI", "")
+        pdf = item.get("openAccessPdf") or {}
+        pdf_url = pdf.get("url", "") if isinstance(pdf, dict) else ""
+        access_status = "open" if pdf_url else "needs_user_pdf"
+        rows.append(
+            make_candidate(
+                normalize_space(item.get("title", "")),
+                authors,
+                str(item.get("year") or ""),
+                item.get("venue", ""),
+                doi,
+                item.get("url", ""),
+                pdf_url,
+                topic,
+                "semantic_scholar",
+                query,
+                access_status,
+                publication_date,
+            )
+        )
+    return rows
+
+
+def make_candidate(title: str, authors: str, year: str, venue: str, doi: str, url: str, pdf_url: str, topic: str, source: str, query: str, access_status: str, source_updated_at: str = "") -> dict[str, str]:
     title = normalize_space(title)
     candidate_id = stable_id(doi, url, title)
+    added_at = now_iso()
     return {
         "candidate_id": candidate_id,
         "title": title,
@@ -231,7 +292,15 @@ def make_candidate(title: str, authors: str, year: str, venue: str, doi: str, ur
         "reading_status": "metadata only",
         "access_status": access_status,
         "metadata_confidence": "medium" if title and year else "low",
-        "added_at": now_iso(),
+        "added_at": added_at,
+        "first_seen_at": added_at,
+        "last_seen_at": added_at,
+        "source_updated_at": source_updated_at,
+        "discovery_run_id": "",
+        "status": "candidate",
+        "human_decision": "",
+        "notion_status": "",
+        "zotero_key": "",
     }
 
 
@@ -310,11 +379,13 @@ def queue_rows(candidates: list[dict[str, str]]) -> list[dict[str, str]]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Search metadata sources for candidate papers.")
     parser.add_argument("--query-file", default="literature/queries/remote_id.yaml", help="Topic query YAML.")
-    parser.add_argument("--provider", choices=["openalex", "crossref", "arxiv"], default="openalex", help="Metadata provider.")
+    parser.add_argument("--provider", choices=["openalex", "crossref", "arxiv", "semantic_scholar"], default="openalex", help="Metadata provider.")
     parser.add_argument("--limit", type=int, default=5, help="Max results per keyword.")
     parser.add_argument("--max-keywords", type=int, default=2, help="Max seed keywords to query.")
     parser.add_argument("--output", default="literature/database/paper_candidates.csv", help="Candidate CSV.")
     parser.add_argument("--queue", default="literature/database/acquisition_queue.csv", help="Manual acquisition queue CSV.")
+    parser.add_argument("--from-updated-date", default="", help="Optional provider update/publication lower bound in YYYY-MM-DD form.")
+    parser.add_argument("--discovery-run-id", default="", help="Stable ID for this discovery run.")
     parser.add_argument("--dry-run", action="store_true", help="Show planned queries without network or writes.")
     args = parser.parse_args()
 
@@ -344,12 +415,13 @@ def main() -> int:
         "openalex": search_openalex,
         "crossref": search_crossref,
         "arxiv": search_arxiv,
+        "semantic_scholar": search_semantic_scholar,
     }
 
     candidates: list[dict[str, str]] = []
     for keyword in selected_keywords:
         try:
-            candidates.extend(searchers[args.provider](keyword, topic, args.limit))
+            candidates.extend(searchers[args.provider](keyword, topic, args.limit, args.from_updated_date))
             time.sleep(1)
         except Exception as exc:
             print(f"Search failed for '{keyword}' via {args.provider}: {exc}", file=sys.stderr)
@@ -361,8 +433,26 @@ def main() -> int:
 
     output = Path(args.output)
     existing = load_csv(output, CANDIDATE_FIELDS)
-    existing_ids = {row["candidate_id"] for row in existing}
-    new_candidates = [row for row in candidates if row["candidate_id"] not in existing_ids]
+    existing_by_id = {row["candidate_id"]: row for row in existing}
+    discovery_run_id = args.discovery_run_id or stable_id(args.provider, topic, now_iso())
+    now = now_iso()
+    new_candidates = []
+    for row in candidates:
+        row["discovery_run_id"] = discovery_run_id
+        row["last_seen_at"] = now
+        if row["candidate_id"] in existing_by_id:
+            existing_row = existing_by_id[row["candidate_id"]]
+            existing_row["last_seen_at"] = now
+            existing_row["discovery_run_id"] = discovery_run_id
+            if row.get("source_updated_at"):
+                existing_row["source_updated_at"] = row["source_updated_at"]
+            if row.get("pdf_url") and not existing_row.get("pdf_url"):
+                existing_row["pdf_url"] = row["pdf_url"]
+                existing_row["access_status"] = "open"
+        else:
+            row["first_seen_at"] = now
+            row["added_at"] = row.get("added_at") or now
+            new_candidates.append(row)
 
     queue_path = Path(args.queue)
     existing_queue = load_csv(queue_path, QUEUE_FIELDS)

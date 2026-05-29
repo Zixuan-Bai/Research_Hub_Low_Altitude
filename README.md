@@ -73,8 +73,9 @@ literature search
 推荐的一键流程：
 
 ```powershell
-python scripts/run_pipeline.py --dry-run
-python scripts/run_pipeline.py
+python scripts/run_discovery_pipeline.py --dry-run
+python scripts/run_discovery_pipeline.py --write-digest
+python scripts/run_reading_pipeline.py --topic remote_id --dry-run
 ```
 
 基础检查：
@@ -84,12 +85,13 @@ python scripts/validate_hub.py
 python scripts/search_literature.py --query-file literature/queries/remote_id.yaml --dry-run
 python scripts/fetch_open_access_pdfs.py --dry-run
 python scripts/import_local_pdfs.py --dry-run
+python scripts/run_reading_pipeline.py --topic remote_id --dry-run
 python scripts/rank_routes.py --dry-run
 ```
 
-这些脚本不会进行真实文献搜索，不会解析全文，也不会生成科学结论。
+Discovery 脚本只处理 metadata。Reading 脚本只有在配置 `OPENAI_API_KEY` 后才会调用多模态模型读取本地 PDF；它会生成可审查草稿，但不会生成最终科学结论。
 
-自动化使用说明见 `docs/automation_workflow.md`。
+自动化使用说明见 `docs/automation_workflow.md` 和 `docs/continuous_research_intelligence.md`。
 
 ## 工具说明
 

@@ -2,6 +2,12 @@
 
 ## Topic Name
 
+## Evidence Version
+
+- evidence_version:
+- last_refresh_at:
+- generated_from_notes:
+
 ## Scope
 
 What does this topic include and exclude?

@@ -2,6 +2,12 @@
 
 ## Topic
 
+## Evidence Version
+
+- evidence_version:
+- last_refresh_at:
+- generated_from_notes:
+
 ## Evidence Table
 
 | Claim / Observation | Source Type | Supporting Academic Sources | Supporting Practical Sources | Evidence Type | Source Quality | Practical Relevance | Strength | Notes |

@@ -34,6 +34,14 @@ CANDIDATE_FIELDS = [
     "access_status",
     "metadata_confidence",
     "added_at",
+    "first_seen_at",
+    "last_seen_at",
+    "source_updated_at",
+    "discovery_run_id",
+    "status",
+    "human_decision",
+    "notion_status",
+    "zotero_key",
 ]
 
 REVIEW_FIELDS = [

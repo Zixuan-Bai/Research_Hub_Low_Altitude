@@ -67,6 +67,15 @@ python scripts/rank_routes.py --dry-run
 
 日常使用优先运行 `python scripts/run_pipeline.py`，不要逐个脚本手动执行。
 
+现在推荐把日常流程拆成两个入口：
+
+```powershell
+python scripts/run_discovery_pipeline.py --topic all --write-digest
+python scripts/run_reading_pipeline.py --topic remote_id
+```
+
+`run_pipeline.py` 只是 discovery pipeline 的兼容包装。
+
 ## 3. 推荐接入顺序
 
 ### Step 1: GitHub
@@ -111,6 +120,7 @@ python scripts/rank_routes.py --dry-run
 
 - Zotero 里的受限 PDF 不应默认上传 GitHub；
 - 只同步 metadata 和笔记更稳妥。
+- v1 中先把 Zotero 当作人工下载和 PDF 管理界面；脚本可从 `literature/inbox/papers/` 和 `literature/pdfs/open_access/` 读取 PDF。
 
 ### Step 4: Notion MCP
 
@@ -120,6 +130,30 @@ python scripts/rank_routes.py --dry-run
 
 - 本仓库仍作为 canonical source；
 - Notion 只作为展示和任务管理界面。
+- 推荐视图：Paper Inbox、Download Queue、Reading Queue、Evidence Map Board、Route Review Board。
+- CSV 是底层可复现数据，不应成为日常人工操作界面。
+
+### Step 5: OpenAI Multimodal PDF Reading
+
+用途：
+
+- 读取完整 PDF；
+- 覆盖正文、图表、系统架构图、实验曲线和参数表；
+- 生成 paper notes、figure/table notes、claims ledger、evidence map、topic brief 和 route card draft。
+
+运行：
+
+```powershell
+python scripts/run_reading_pipeline.py --topic remote_id
+```
+
+需要：
+
+```powershell
+$env:OPENAI_API_KEY="..."
+```
+
+不要把 API key 写入仓库。
 
 ## 4. Codex 如何持续工作
 

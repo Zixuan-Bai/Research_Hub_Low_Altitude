@@ -17,8 +17,11 @@ Create a structured paper note.
 - method;
 - assumptions;
 - evidence;
+- visual evidence from figures, tables, diagrams, curves, and parameter tables;
 - limitations;
+- reusable knowledge;
 - usefulness for this hub;
+- claims ledger;
 - possible follow-up route;
 - reliability notes.
 

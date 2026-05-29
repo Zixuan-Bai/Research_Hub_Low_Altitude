@@ -11,17 +11,22 @@ REQUIRED_DIRS = [
     "literature/database",
     "literature/notes/paper_notes",
     "literature/notes/context_notes",
+    "literature/notes/figure_table_notes",
+    "literature/notes/claims",
     "literature/notes/survey_notes",
     "literature/pdfs/open_access",
     "literature/queries",
     "topics/candidates",
     "topics/templates",
+    "topics/evidence_maps",
+    "topics/briefs",
     "route_cards/candidates",
     "route_cards/templates",
     "prompts",
     "rubrics",
     "scripts",
     "outputs/tmp",
+    "outputs/weekly",
 ]
 
 REQUIRED_FILES = [
@@ -33,6 +38,7 @@ REQUIRED_FILES = [
     "docs/mcp_skill_roadmap.md",
     "docs/tooling_guide.md",
     "docs/automation_workflow.md",
+    "docs/continuous_research_intelligence.md",
     "literature/database/papers.csv",
     "literature/database/paper_candidates.csv",
     "literature/database/acquisition_queue.csv",
@@ -71,12 +77,15 @@ REQUIRED_FILES = [
     "scripts/search_literature.py",
     "scripts/classify_candidates.py",
     "scripts/run_pipeline.py",
+    "scripts/run_discovery_pipeline.py",
+    "scripts/run_reading_pipeline.py",
     "scripts/fetch_open_access_pdfs.py",
     "scripts/rank_routes.py",
     "scripts/validate_hub.py",
     ".github/workflows/validate.yml",
     ".github/workflows/literature_pipeline.yml",
     "configs/pipeline.json",
+    "configs/integrations.example.json",
 ]
 
 ALLOWED_EMPTY_FILES = {
@@ -84,10 +93,15 @@ ALLOWED_EMPTY_FILES = {
     "literature/inbox/papers/.gitkeep",
     "literature/notes/paper_notes/.gitkeep",
     "literature/notes/context_notes/.gitkeep",
+    "literature/notes/figure_table_notes/.gitkeep",
+    "literature/notes/claims/.gitkeep",
     "literature/notes/survey_notes/.gitkeep",
     "literature/pdfs/open_access/.gitkeep",
     "route_cards/candidates/.gitkeep",
     "outputs/tmp/.gitkeep",
+    "outputs/weekly/.gitkeep",
+    "topics/evidence_maps/.gitkeep",
+    "topics/briefs/.gitkeep",
 }
 
 
