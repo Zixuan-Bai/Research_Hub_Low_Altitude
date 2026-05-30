@@ -41,8 +41,6 @@ python scripts/run_discovery_pipeline.py --topic all --write-digest
 python scripts/run_reading_pipeline.py --topic remote_id
 ```
 
-旧入口 `python scripts/run_pipeline.py` 仍然保留，但只是 discovery pipeline 的兼容包装。
-
 ## 本地一键运行
 
 默认跑所有 topic，不下载 PDF：
@@ -75,7 +73,42 @@ python scripts/run_discovery_pipeline.py --topic remote_id --download-pdfs
 python scripts/run_reading_pipeline.py --topic remote_id
 ```
 
-如果没有 `OPENAI_API_KEY`，阅读脚本只会把任务加入 review queue，不会伪造阅读结果。
+如果 PDF 是浏览器下载的随机文件名，先运行：
+
+```powershell
+python scripts/run_reading_pipeline.py --topic remote_id --rename-only --dry-run
+python scripts/run_reading_pipeline.py --topic remote_id --rename-only
+```
+
+脚本会用 DOI、PDF metadata title、可见文本和候选标题相似度做高置信匹配，再自动改成统一格式：
+
+```text
+【人工备注】-2026-IEEE_TWC-short_title-candidate_id.pdf
+2026-IEEE_TWC-short_title-candidate_id.pdf
+```
+
+`【人工备注】` 是可选前缀，只给你自己看。你可以随时添加、删除或修改，流程会忽略它并在重命名时保留它。
+
+如果 PDF 不在候选库中，脚本会尝试用 PDF DOI/标题上网查 metadata，补入 `paper_candidates.csv` 后再重命名。可用 `--no-online-lookup` 关闭。
+
+如果没有对应 provider 的 API key，阅读脚本只会把任务加入 review queue，不会伪造阅读结果。
+
+默认阅读 provider 是 Kimi/Moonshot：
+
+```powershell
+$env:MOONSHOT_API_KEY="..."
+$env:KIMI_READING_MODEL="kimi-k2.6"
+python scripts/run_reading_pipeline.py --topic remote_id --provider kimi
+```
+
+更推荐复制 `.env.example` 为 `.env`，把真实 key 放在 `.env`。`.env` 已被 `.gitignore` 忽略。
+
+也可以切回 OpenAI：
+
+```powershell
+$env:OPENAI_API_KEY="..."
+python scripts/run_reading_pipeline.py --topic remote_id --provider openai
+```
 
 ## 你主要看哪个文件
 

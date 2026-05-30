@@ -11,11 +11,25 @@
   "download_open_access_pdfs": false,
   "weekly_digest": true,
   "reading": {
-    "provider": "openai",
-    "model_env": "OPENAI_READING_MODEL",
-    "default_model": "gpt-5.5",
+    "provider": "kimi",
     "max_papers_per_run": 5,
-    "human_review_required": true
+    "human_review_required": true,
+    "providers": {
+      "kimi": {
+        "api_key_env": "MOONSHOT_API_KEY",
+        "fallback_api_key_env": "KIMI_API_KEY",
+        "base_url_env": "MOONSHOT_BASE_URL",
+        "fallback_base_url_env": "KIMI_BASE_URL",
+        "default_base_url": "https://api.moonshot.cn/v1",
+        "model_env": "KIMI_READING_MODEL",
+        "default_model": "kimi-k2.6"
+      },
+      "openai": {
+        "api_key_env": "OPENAI_API_KEY",
+        "model_env": "OPENAI_READING_MODEL",
+        "default_model": "gpt-5.5"
+      }
+    }
   },
   "notion": {
     "enabled": false,

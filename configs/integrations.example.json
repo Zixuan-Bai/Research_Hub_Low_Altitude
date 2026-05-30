@@ -4,6 +4,15 @@
     "reading_model_env": "OPENAI_READING_MODEL",
     "default_reading_model": "gpt-5.5"
   },
+  "kimi": {
+    "api_key_env": "MOONSHOT_API_KEY",
+    "fallback_api_key_env": "KIMI_API_KEY",
+    "base_url_env": "MOONSHOT_BASE_URL",
+    "fallback_base_url_env": "KIMI_BASE_URL",
+    "default_base_url": "https://api.moonshot.cn/v1",
+    "reading_model_env": "KIMI_READING_MODEL",
+    "default_reading_model": "kimi-k2.6"
+  },
   "notion": {
     "enabled": false,
     "token_env": "NOTION_TOKEN",

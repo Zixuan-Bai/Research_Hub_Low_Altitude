@@ -54,7 +54,7 @@ MCP 配置通常属于本地运行环境，不应把 API key 或 secret 放进�
 
 ```powershell
 python scripts/validate_hub.py
-python scripts/run_pipeline.py --dry-run
+python scripts/run_discovery_pipeline.py --dry-run
 python scripts/search_literature.py --query-file literature/queries/remote_id.yaml --dry-run
 python scripts/fetch_open_access_pdfs.py --dry-run
 python scripts/import_local_pdfs.py --dry-run
@@ -65,16 +65,12 @@ python scripts/rank_routes.py --dry-run
 
 当前阶段的核心规则是：先建立 source-quality-first 和 practical-context-first 的 repo 流程，再扩大自动化范围。
 
-日常使用优先运行 `python scripts/run_pipeline.py`，不要逐个脚本手动执行。
-
-现在推荐把日常流程拆成两个入口：
+日常流程拆成两个入口：
 
 ```powershell
 python scripts/run_discovery_pipeline.py --topic all --write-digest
 python scripts/run_reading_pipeline.py --topic remote_id
 ```
-
-`run_pipeline.py` 只是 discovery pipeline 的兼容包装。
 
 ## 3. 推荐接入顺序
 
@@ -133,7 +129,7 @@ python scripts/run_reading_pipeline.py --topic remote_id
 - 推荐视图：Paper Inbox、Download Queue、Reading Queue、Evidence Map Board、Route Review Board。
 - CSV 是底层可复现数据，不应成为日常人工操作界面。
 
-### Step 5: OpenAI Multimodal PDF Reading
+### Step 5: Kimi/OpenAI PDF Reading
 
 用途：
 
@@ -144,13 +140,30 @@ python scripts/run_reading_pipeline.py --topic remote_id
 运行：
 
 ```powershell
-python scripts/run_reading_pipeline.py --topic remote_id
+python scripts/run_reading_pipeline.py --topic remote_id --provider kimi
 ```
 
 需要：
 
 ```powershell
+$env:MOONSHOT_API_KEY="..."
+$env:KIMI_READING_MODEL="kimi-k2.6"
+```
+
+更推荐把真实 key 放到本地 `.env`：
+
+```powershell
+Copy-Item .env.example .env
+notepad .env
+```
+
+不要把真实 key 写进 `configs/pipeline.json` 或 `configs/integrations.example.json`。
+
+可选切换到 OpenAI：
+
+```powershell
 $env:OPENAI_API_KEY="..."
+python scripts/run_reading_pipeline.py --topic remote_id --provider openai
 ```
 
 不要把 API key 写入仓库。

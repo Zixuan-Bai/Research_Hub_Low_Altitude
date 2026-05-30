@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -93,6 +94,22 @@ def stable_id(*parts: str) -> str:
     return hashlib.sha1(value.encode("utf-8")).hexdigest()[:12]
 
 
+def normalize_title(value: str) -> str:
+    value = value.lower()
+    value = re.sub(r"[^a-z0-9]+", " ", value)
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def candidate_group_key(row: dict[str, str]) -> str:
+    doi = row.get("doi", "").lower().strip()
+    if doi:
+        return f"doi:{doi}"
+    url = row.get("url", "").lower().strip()
+    if url:
+        return f"url:{url}"
+    return f"title:{normalize_title(row.get('title', ''))}"
+
+
 def read_csv(path: Path, fields: list[str]) -> list[dict[str, str]]:
     if not path.exists() or path.stat().st_size == 0:
         return []
@@ -146,7 +163,7 @@ def classify_practical_relevance(row: dict[str, str]) -> tuple[str, str]:
 
 def queue_item(row: dict[str, str], reason: str, action: str, source_path: str) -> dict[str, str]:
     return {
-        "item_id": stable_id(row.get("candidate_id", ""), reason),
+        "item_id": stable_id("review", candidate_group_key(row)),
         "item_type": "paper_candidate",
         "topic": row.get("topic", ""),
         "title": row.get("title", ""),
@@ -187,15 +204,24 @@ def classify_rows(rows: list[dict[str, str]], source_path: str) -> tuple[list[di
 
 
 def dedupe_queue(rows: list[dict[str, str]]) -> list[dict[str, str]]:
-    seen = set()
-    unique = []
+    grouped: dict[str, dict[str, str]] = {}
     for row in rows:
         key = row["item_id"]
-        if key in seen:
+        if key not in grouped:
+            grouped[key] = row.copy()
             continue
-        seen.add(key)
-        unique.append(row)
-    return unique
+        existing = grouped[key]
+        reasons = [value.strip() for value in existing.get("reason", "").split(";") if value.strip()]
+        actions = [value.strip() for value in existing.get("recommended_action", "").split(";") if value.strip()]
+        reason = row.get("reason", "").strip()
+        action = row.get("recommended_action", "").strip()
+        if reason and reason not in reasons:
+            reasons.append(reason)
+        if action and action not in actions:
+            actions.append(action)
+        existing["reason"] = "; ".join(reasons)
+        existing["recommended_action"] = "; ".join(actions)
+    return list(grouped.values())
 
 
 def main() -> int:

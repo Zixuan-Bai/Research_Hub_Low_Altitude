@@ -19,5 +19,9 @@ __pycache__/
 .ruff_cache/
 .venv/
 .env
+.env.*
+!.env.example
+configs/*.local.json
+configs/secrets*.json
 .DS_Store
 .vscode/

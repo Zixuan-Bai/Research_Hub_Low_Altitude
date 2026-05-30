@@ -76,7 +76,6 @@ REQUIRED_FILES = [
     "scripts/import_local_pdfs.py",
     "scripts/search_literature.py",
     "scripts/classify_candidates.py",
-    "scripts/run_pipeline.py",
     "scripts/run_discovery_pipeline.py",
     "scripts/run_reading_pipeline.py",
     "scripts/fetch_open_access_pdfs.py",

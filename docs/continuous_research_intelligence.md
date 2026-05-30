@@ -40,25 +40,74 @@ Run after PDFs are downloaded into `literature/inbox/papers/` or
 python scripts/run_reading_pipeline.py --topic remote_id
 ```
 
-This pipeline uses OpenAI multimodal PDF input by default. It should read both
-text and visual page information, then write structured notes, figure/table
-notes, claims ledgers, evidence maps, topic briefs, and watch-only route-card
-drafts.
+If downloaded PDFs have arbitrary browser filenames, normalize them first:
+
+```powershell
+python scripts/run_reading_pipeline.py --topic remote_id --rename-only --dry-run
+python scripts/run_reading_pipeline.py --topic remote_id --rename-only
+```
+
+The script first checks whether the filename already contains a `candidate_id`.
+If not, it tries DOI, PDF metadata title, visible PDF text, and filename/title
+similarity against `paper_candidates.csv`. Only high-confidence matches are
+renamed to the normalized pattern below; low-confidence matches go to the
+review queue.
+
+```text
+【optional-human-note】-2026-IEEE_TWC-short_title-candidate_id.pdf
+2026-IEEE_TWC-short_title-candidate_id.pdf
+```
+
+The `【optional-human-note】` prefix is for your own visual hints. You can add,
+remove, or change it at any time; the pipeline ignores it during matching and
+preserves it when renaming.
+
+If a PDF is not in `paper_candidates.csv`, the reading pipeline can look up its
+metadata online from the inferred DOI/title and add a conservative candidate
+row before renaming:
+
+```powershell
+python scripts/run_reading_pipeline.py --topic remote_id --rename-only
+```
+
+Use `--no-online-lookup` to disable this behavior.
+
+This pipeline uses Kimi/Moonshot file reading by default, with OpenAI kept as an
+optional provider. It writes structured notes, figure/table notes, claims
+ledgers, evidence maps, topic briefs, and watch-only route-card drafts.
 
 Required environment:
 
 ```powershell
-$env:OPENAI_API_KEY="..."
+$env:MOONSHOT_API_KEY="..."
 ```
+
+Recommended local setup:
+
+```powershell
+Copy-Item .env.example .env
+notepad .env
+```
+
+Put the real key in `.env`, not in `configs/*.json`. The repository ignores
+`.env`, `configs/*.local.json`, and `configs/secrets*.json`.
 
 Optional environment:
 
 ```powershell
-$env:OPENAI_READING_MODEL="gpt-5.5"
+$env:KIMI_READING_MODEL="kimi-k2.6"
+$env:MOONSHOT_BASE_URL="https://api.moonshot.cn/v1"
 ```
 
-Without `OPENAI_API_KEY`, the reading pipeline only queues a review item and
-does not mark a PDF as read.
+Without `MOONSHOT_API_KEY` or `KIMI_API_KEY`, the reading pipeline only queues a
+review item and does not mark a PDF as read.
+
+Provider override:
+
+```powershell
+python scripts/run_reading_pipeline.py --topic remote_id --provider kimi
+python scripts/run_reading_pipeline.py --topic remote_id --provider openai
+```
 
 ## Recommended External Tools
 
