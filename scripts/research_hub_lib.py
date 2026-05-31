@@ -8,6 +8,7 @@ candidate/review/acquisition CSV state machine.
 from __future__ import annotations
 
 import base64
+import html
 import hashlib
 import json
 import os
@@ -25,28 +26,13 @@ from typing import Iterable
 ITEMS_PATH = Path("data/items.jsonl")
 MANUAL_ITEMS_PATH = Path("data/manual_items.jsonl")
 DEFAULT_CONFIG = Path("configs/pipeline.json")
+DEFAULT_CONTEXT_CONFIG = Path("configs/context_sources.json")
 USER_AGENT = "low-altitude-research-hub/0.2"
 NEEDS_TOPIC_REVIEW = "needs_topic_review"
-ITEM_STATUSES = {
-    "new",
-    "kept",
-    "rejected",
-    "downloaded",
-    "read",
-    "summarized",
-    "used_in_synthesis",
-}
 REVIEW_STATUSES = {"new", "kept", "rejected", "downloaded"}
 PROCESS_STATUSES = {"unread", "read", "summarized", "used_in_synthesis"}
-STATUS_RANK = {
-    "new": 0,
-    "kept": 1,
-    "downloaded": 2,
-    "read": 3,
-    "summarized": 4,
-    "used_in_synthesis": 5,
-    "rejected": 99,
-}
+METADATA_STATUSES = {"auto", "needs_review", "verified"}
+METADATA_RANK = {"auto": 0, "needs_review": 1, "verified": 2}
 PROCESS_RANK = {
     "unread": 0,
     "read": 1,
@@ -276,12 +262,6 @@ def review_status(item: dict) -> str:
     value = item.get("review_status")
     if value in REVIEW_STATUSES:
         return value
-    legacy = item.get("status")
-    if legacy in REVIEW_STATUSES:
-        return legacy
-    metadata_value = (item.get("metadata") or {}).get("review_status")
-    if metadata_value in REVIEW_STATUSES:
-        return metadata_value
     return "new"
 
 
@@ -289,21 +269,21 @@ def process_status(item: dict) -> str:
     value = item.get("process_status")
     if value in PROCESS_STATUSES:
         return value
-    legacy = item.get("status")
-    if legacy in {"read", "summarized", "used_in_synthesis"}:
-        return legacy
-    metadata = item.get("metadata") or {}
-    if metadata.get("summary_status") == "summarized":
-        return "summarized"
-    if metadata.get("reading_status") in {"read", "full-text parsed"}:
-        return "read"
     return "unread"
+
+
+def metadata_status(item: dict) -> str:
+    value = item.get("metadata_status")
+    if value in METADATA_STATUSES:
+        return value
+    return "auto"
 
 
 def sync_status_fields(item: dict) -> dict:
     item["review_status"] = review_status(item)
     item["process_status"] = process_status(item)
-    item["status"] = item["process_status"] if item["process_status"] != "unread" else item["review_status"]
+    item["metadata_status"] = metadata_status(item)
+    item.pop("status", None)
     return item
 
 
@@ -334,9 +314,9 @@ def make_item(
         "date": date_value,
         "abstract_or_snippet": normalize_space(abstract_or_snippet),
         "pdf_url": pdf_url,
-        "status": "new",
         "review_status": "new",
         "process_status": "unread",
+        "metadata_status": "auto",
         "score": score,
         "tags": tags or [],
         "created_at": created,
@@ -393,7 +373,7 @@ def merge_item(existing: dict, incoming: dict) -> dict:
     incoming = sync_status_fields(dict(incoming))
     merged = dict(existing)
     for key, value in incoming.items():
-        if key in {"created_at", "status", "review_status", "process_status"}:
+        if key in {"created_at", "review_status", "process_status"}:
             continue
         if value not in ("", None, [], {}):
             merged[key] = value
@@ -404,6 +384,13 @@ def merge_item(existing: dict, incoming: dict) -> dict:
     existing_process = process_status(existing)
     incoming_process = process_status(incoming)
     merged["process_status"] = existing_process if PROCESS_RANK[existing_process] >= PROCESS_RANK[incoming_process] else incoming_process
+    existing_metadata_status = metadata_status(existing)
+    incoming_metadata_status = metadata_status(incoming)
+    merged["metadata_status"] = (
+        existing_metadata_status
+        if METADATA_RANK[existing_metadata_status] >= METADATA_RANK[incoming_metadata_status]
+        else incoming_metadata_status
+    )
     merged["created_at"] = existing.get("created_at") or incoming.get("created_at") or now_iso()
     merged["updated_at"] = now_iso()
     existing_tags = set(existing.get("tags") or [])
@@ -497,6 +484,7 @@ def prepare_pdf_item(pdf_path: Path, topic: str, providers: list[str], lookup_li
     metadata["pdf_fingerprint"] = sha256_file(pdf_path)
     metadata["metadata_match_confidence"] = round(confidence, 3)
     metadata["metadata_match_reason"] = reason
+    item["metadata_status"] = "needs_review" if confidence < 0.72 else metadata_status(item)
     return sync_status_fields(item), confidence, reason
 
 
@@ -739,6 +727,106 @@ SEARCHERS = {
 }
 
 
+def load_context_source_config(path: Path = DEFAULT_CONTEXT_CONFIG) -> dict:
+    if not path.exists():
+        return {"rss": [], "urls": []}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return {
+        "rss": list(data.get("rss") or data.get("rss_feeds") or []),
+        "urls": list(data.get("urls") or data.get("manual_urls") or []),
+    }
+
+
+def normalize_source_type(value: str) -> str:
+    value = (value or "news").strip().lower()
+    allowed = {"news", "standard", "policy", "whitepaper", "report"}
+    return value if value in allowed else "news"
+
+
+def context_item_from_url(entry: dict) -> dict:
+    url = normalize_space(str(entry.get("url") or ""))
+    title = normalize_space(str(entry.get("title") or url or "Untitled context source"))
+    topic = normalize_space(str(entry.get("topic") or NEEDS_TOPIC_REVIEW))
+    source = normalize_space(str(entry.get("source") or entry.get("name") or urllib.parse.urlparse(url).netloc or "manual_context"))
+    return make_item(
+        title=title,
+        url=url,
+        source=source,
+        source_type=normalize_source_type(str(entry.get("source_type") or "news")),
+        topic=topic,
+        date_value=normalize_space(str(entry.get("date") or "")),
+        abstract_or_snippet=normalize_space(str(entry.get("snippet") or entry.get("abstract_or_snippet") or "")),
+        score=int(entry.get("score") or 1),
+        tags=list(entry.get("tags") or ["context-source"]),
+        metadata={"provider": "context_sources", "collection_mode": "manual_url"},
+    )
+
+
+def rss_text(element: ET.Element, names: list[str], ns: dict[str, str]) -> str:
+    for name in names:
+        found = element.find(name, ns)
+        if found is not None and found.text:
+            return normalize_space(found.text)
+    return ""
+
+
+def rss_link(element: ET.Element, ns: dict[str, str]) -> str:
+    link = rss_text(element, ["link", "atom:link"], ns)
+    if link:
+        return link
+    found = element.find("atom:link", ns)
+    if found is not None:
+        return normalize_space(found.attrib.get("href", ""))
+    return ""
+
+
+def collect_rss_source(entry: dict, limit: int = 20) -> list[dict]:
+    url = normalize_space(str(entry.get("url") or ""))
+    if not url:
+        return []
+    topic = normalize_space(str(entry.get("topic") or NEEDS_TOPIC_REVIEW))
+    source_name = normalize_space(str(entry.get("name") or urllib.parse.urlparse(url).netloc or "rss"))
+    source_type = normalize_source_type(str(entry.get("source_type") or "news"))
+    text = fetch_text(url, timeout=int(entry.get("timeout") or 30))
+    root = ET.fromstring(text)
+    ns = {"atom": "http://www.w3.org/2005/Atom", "dc": "http://purl.org/dc/elements/1.1/"}
+    nodes = list(root.findall(".//item")) or list(root.findall("atom:entry", ns))
+    rows: list[dict] = []
+    for node in nodes[:limit]:
+        title = rss_text(node, ["title", "atom:title"], ns)
+        link = rss_link(node, ns)
+        published = rss_text(node, ["pubDate", "published", "updated", "atom:published", "atom:updated", "dc:date"], ns)
+        snippet = rss_text(node, ["description", "summary", "atom:summary"], ns)
+        if not title and not link:
+            continue
+        rows.append(
+            make_item(
+                title=title or link,
+                url=link,
+                source=source_name,
+                source_type=source_type,
+                topic=topic,
+                date_value=published[:10],
+                abstract_or_snippet=html.unescape(re.sub(r"<[^>]+>", " ", snippet)),
+                score=int(entry.get("score") or 1),
+                tags=["context-source", "rss"],
+                metadata={"provider": "context_sources", "collection_mode": "rss", "feed_url": url},
+            )
+        )
+    return rows
+
+
+def collect_context_sources(path: Path = DEFAULT_CONTEXT_CONFIG) -> list[dict]:
+    config = load_context_source_config(path)
+    rows = [context_item_from_url(entry) for entry in config["urls"] if entry.get("url")]
+    for entry in config["rss"]:
+        try:
+            rows.extend(collect_rss_source(entry, limit=int(entry.get("limit") or 20)))
+        except Exception as exc:
+            print(f"Warning: context source failed for {entry.get('url', '')}: {exc}")
+    return dedupe_items(rows)
+
+
 def collect_topic_items(query_file: Path, providers: list[str], limit_per_keyword: int, max_keywords: int) -> list[dict]:
     query_data = parse_simple_query_yaml(query_file)
     topic = str(query_data["topic"])
@@ -783,7 +871,8 @@ def item_line(item: dict) -> str:
     link = f" [{source}]({url})" if url else f" [{source}]"
     return (
         f"- **{title}**{link}；主题：`{topic}`；相关性：{score}；权威性：{authority}；"
-        f"人工状态：`{review_status(item)}`；流程状态：`{process_status(item)}`"
+        f"review_status：`{review_status(item)}`；process_status：`{process_status(item)}`；"
+        f"metadata_status：`{metadata_status(item)}`"
     )
 
 
@@ -817,7 +906,11 @@ def write_weekly_digest(items: list[dict], run_items: list[dict], output_date: s
         "",
     ]
     lines += section("新增论文", papers[:20], "本轮没有新增通过 topic gate 的论文。")
-    lines += section("新增标准 / 政策 / 报告 / 产业信号", context_items[:20], "本轮尚未接入新的标准、政策、报告或产业信号源；可通过 `data/manual_items.jsonl` 手动补充。")
+    lines += section(
+        "新增标准 / 政策 / 报告 / 产业信号",
+        context_items[:20],
+        "本轮尚未接入新的标准、政策、报告或产业信号源；可通过 `configs/context_sources.json` 或 `data/manual_items.jsonl` 手动补充。",
+    )
     lines += section("优先 review 条目", top_items, "没有可 review 条目。")
     lines += section("值得下载 PDF 的条目", downloadable, "本轮没有发现明确 open PDF URL；受限 PDF 请通过合法访问方式自行下载。")
     lines += section("建议进入 LLM 阅读的条目", reading, "本轮没有推荐阅读条目。")
@@ -832,7 +925,7 @@ def write_weekly_digest(items: list[dict], run_items: list[dict], output_date: s
         "",
         "## 建议下一步",
         "",
-        "1. 打开 `outputs/review_dashboard.md`，先处理相关性和权威性都较高的 `new` 条目。",
+        "1. 打开 Streamlit review app 或 `outputs/review_dashboard.md`，先处理相关性和权威性都较高的 `new` 条目。",
         "2. 对明确有价值的条目标记为 `kept`；对无关条目标记为 `rejected`。",
         "3. 对需要精读的 PDF 运行 `python scripts/read_item.py <pdf路径> --topic <topic>`。",
         "4. topic 下已读中文笔记达到 10 篇左右后，再运行 `python scripts/synthesize_topic.py --topic <topic>`。",
@@ -847,12 +940,13 @@ def write_review_dashboard(items: list[dict], path: Path = Path("outputs/review_
     lines = [
         "# 研究情报复核面板",
         "",
-        "> 机器生成的轻量 review 面板。常规使用时优先看这里，不需要直接维护内部文件。",
+        "> 机器生成的轻量 review 面板。常规使用时优先看这里或 Streamlit，不需要直接维护内部文件。",
         "",
         "## 建议操作",
         "",
         "- 人工状态 `review_status`：`new` / `kept` / `downloaded` / `rejected`，由你在 GUI 中修改。",
         "- 流程状态 `process_status`：`unread` / `read` / `summarized` / `used_in_synthesis`，通常由脚本自动维护。",
+        "- 元数据状态 `metadata_status`：`auto` / `needs_review` / `verified`，GUI 保存 metadata 后会标记为 `verified`。",
         "",
     ]
     lines += ["## 按人工状态", ""]
@@ -890,6 +984,20 @@ def extract_pdf_visible_text(path: Path, max_bytes: int = 2_000_000) -> str:
         decoded = data.decode("latin-1", errors="ignore")
     strings = re.findall(r"[A-Za-z][A-Za-z0-9,.:;()\- /]{8,}", decoded)
     return normalize_space(" ".join(strings[:1000]))
+
+
+def extract_pdf_text_with_pypdf(path: Path, max_pages: int = 12, max_chars: int = 24000) -> str:
+    for module_name in ["pypdf", "PyPDF2"]:
+        try:
+            module = __import__(module_name)
+            reader = module.PdfReader(str(path))
+            chunks: list[str] = []
+            for page in reader.pages[:max_pages]:
+                chunks.append(page.extract_text() or "")
+            return normalize_space("\n".join(chunks))[:max_chars]
+        except Exception:
+            continue
+    return extract_pdf_visible_text(path, max_bytes=3_000_000)[:max_chars]
 
 
 def extract_pdf_title(path: Path) -> str:
@@ -1098,6 +1206,14 @@ def kimi_config(config: dict) -> tuple[str, str, str]:
     return api_key, base_url, model
 
 
+def has_kimi_api_key(config: dict) -> bool:
+    providers = (config.get("reading") or {}).get("providers") or {}
+    kimi = providers.get("kimi") or {}
+    api_key_env = str(kimi.get("api_key_env") or "MOONSHOT_API_KEY")
+    fallback_api_key_env = str(kimi.get("fallback_api_key_env") or "KIMI_API_KEY")
+    return bool(os.environ.get(api_key_env) or os.environ.get(fallback_api_key_env))
+
+
 def build_chinese_reading_prompt(item: dict, fingerprint: str) -> str:
     metadata = json.dumps(item, ensure_ascii=False, indent=2)
     return f"""请阅读这篇论文 PDF，为低空研究情报助手生成一份中文阅读笔记。
@@ -1154,6 +1270,84 @@ def kimi_read_pdf(pdf_path: Path, item: dict, config: dict, timeout: int = 300) 
     return extract_chat_completion_text(data), model
 
 
+def read_pdf_metadata_only(pdf_path: Path, item: dict) -> tuple[dict, Path | None, str]:
+    metadata = item.setdefault("metadata", {})
+    metadata["pdf_fingerprint"] = sha256_file(pdf_path)
+    metadata["reading_mode"] = "metadata-only"
+    item["process_status"] = process_status(item)
+    item = sync_status_fields(item)
+    all_items, changed = upsert_items([item])
+    write_review_dashboard(all_items)
+    return changed[0], None, "metadata-only"
+
+
+def build_text_draft_note(pdf_path: Path, item: dict, extracted_text: str) -> str:
+    metadata = item.get("metadata") or {}
+    return f"""# 条目摘要
+
+## 元数据
+- 标题：{item.get("title", "")}
+- 年份：{metadata.get("year") or item.get("date") or "metadata only"}
+- 来源：{metadata.get("venue") or metadata.get("publisher") or item.get("source", "")}
+- DOI：{metadata.get("doi") or "metadata only"}
+- 状态：full-text parsed；text-draft；needs-review
+
+## 收录原因
+- inferred: 该条目由本地 PDF 读取流程导入，topic 为 `{item.get("topic", "")}`；需要人工复核相关性。
+
+## 核心内容
+- unsupported: 本草稿只使用 pypdf 提取文本，尚未调用 Kimi/LLM 进行结构化精读。
+
+## 方法 / 系统 / 政策细节
+- needs-review: 请基于 PDF 原文人工或使用 Kimi 模式补充。
+
+## 关键证据
+- needs-review: 以下为自动抽取文本片段，不等于人工确认事实。
+
+```text
+{extracted_text[:12000]}
+```
+
+## 局限性
+- paper-supported: 仅当上述抽取文本中明确出现的信息才可作为初步依据。
+- unsupported: 本草稿不支持研究 gap、创新性或最终方向判断。
+
+## 与低空研究的关联
+- inferred: 需要人工确认该 PDF 是否支撑低空通信或自主航空系统研究。
+
+## 可复用参数 / 模型 / 基线
+- needs-review: 尚未结构化提取。
+
+## 后续动作
+- proposal: 若该条目重要，使用 `python scripts/read_item.py "{pdf_path}" --topic {item.get("topic", "")} --mode kimi` 生成精读笔记。
+
+## 可靠性说明
+- full-text parsed
+- machine-generated
+- needs-review
+"""
+
+
+def read_pdf_to_text_draft(pdf_path: Path, item: dict) -> tuple[dict, Path, str]:
+    text = extract_pdf_text_with_pypdf(pdf_path)
+    if not text.strip():
+        raise RuntimeError("Could not extract readable PDF text with pypdf/PyPDF2.")
+    note = build_text_draft_note(pdf_path, item, text)
+    item["process_status"] = "read"
+    item["updated_at"] = now_iso()
+    metadata = item.setdefault("metadata", {})
+    metadata["pdf_fingerprint"] = sha256_file(pdf_path)
+    metadata["reading_status"] = "full-text parsed"
+    metadata["summary_status"] = "text-draft"
+    metadata["reading_mode"] = "text-draft"
+    note_path = write_item_note(item, note, pdf_path, "text-draft", provider="pypdf", reading_status="full-text parsed")
+    item["note_path"] = str(note_path)
+    item = sync_status_fields(item)
+    all_items, _ = upsert_items([item])
+    write_review_dashboard(all_items)
+    return item, note_path, "text-draft"
+
+
 def legacy_note_path_for_item(item: dict) -> Path:
     return Path("notes/items") / f"{item['id']}.md"
 
@@ -1190,7 +1384,7 @@ def sync_note_filename(item: dict) -> dict:
     return item
 
 
-def write_item_note(item: dict, note: str, pdf_path: Path, model: str) -> Path:
+def write_item_note(item: dict, note: str, pdf_path: Path, model: str, provider: str = "kimi", reading_status: str = "full-text parsed") -> Path:
     path = preferred_note_path_for_item(item)
     path.parent.mkdir(parents=True, exist_ok=True)
     provenance = [
@@ -1200,11 +1394,11 @@ def write_item_note(item: dict, note: str, pdf_path: Path, model: str) -> Path:
             {
                 "item_id": item["id"],
                 "reading_model": model,
-                "reading_provider": "kimi",
+                "reading_provider": provider,
                 "read_at": now_iso(),
                 "pdf_fingerprint": sha256_file(pdf_path),
                 "pdf_source": str(pdf_path),
-                "reading_status": "full-text parsed",
+                "reading_status": reading_status,
                 "human_reviewed": False,
             },
             ensure_ascii=False,

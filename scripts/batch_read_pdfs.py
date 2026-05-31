@@ -36,12 +36,21 @@ def main() -> int:
     parser.add_argument("--lookup-limit", type=int, default=3, help="Metadata lookup result limit per provider.")
     parser.add_argument("--max-items", type=int, default=0, help="Maximum PDFs to read in this run. 0 means no limit.")
     parser.add_argument("--timeout", type=int, default=300, help="Kimi request timeout in seconds per PDF.")
+    parser.add_argument(
+        "--mode",
+        choices=["auto", "metadata-only", "text-draft", "kimi"],
+        default="auto",
+        help="Reading mode. auto uses kimi only when a Kimi/Moonshot API key is present; otherwise text-draft.",
+    )
     parser.add_argument("--force", action="store_true", help="Re-read PDFs even when an existing note is found.")
     parser.add_argument("--dry-run", action="store_true", help="List planned work without API calls or writes.")
     args = parser.parse_args()
 
     hub.load_env_file()
     config = hub.load_config(Path(args.config))
+    mode = args.mode
+    if mode == "auto":
+        mode = "kimi" if hub.has_kimi_api_key(config) else "text-draft"
     providers = parse_providers(args.providers)
     pdfs = discover_pdfs(Path(args.pdf_dir))
     items = hub.load_items()
@@ -60,6 +69,7 @@ def main() -> int:
     print(f"Found PDFs: {len(pdfs)}")
     print(f"Skipped existing notes: {skipped}")
     print(f"Planned reads: {len(planned)}")
+    print(f"Mode: {mode}")
     for pdf_path, topic, score, reason in planned:
         print(f"- {pdf_path} -> topic `{topic}` ({score:.2f}, {reason})")
 
@@ -71,8 +81,16 @@ def main() -> int:
         try:
             item, confidence, match_reason = hub.prepare_pdf_item(pdf_path, topic, providers, args.lookup_limit)
             item.setdefault("metadata", {})["topic_inference_reason"] = topic_reason
-            item, note_path, model = hub.read_pdf_to_note(pdf_path, item, config, args.timeout)
-            print(f"Wrote note: {note_path} ({model}; metadata {confidence:.2f}, {match_reason})")
+            if mode == "metadata-only":
+                item, note_path, model = hub.read_pdf_metadata_only(pdf_path, item)
+            elif mode == "text-draft":
+                item, note_path, model = hub.read_pdf_to_text_draft(pdf_path, item)
+            else:
+                item, note_path, model = hub.read_pdf_to_note(pdf_path, item, config, args.timeout)
+            if note_path:
+                print(f"Wrote note: {note_path} ({model}; metadata {confidence:.2f}, {match_reason})")
+            else:
+                print(f"Updated metadata only: {item.get('id')} ({model}; metadata {confidence:.2f}, {match_reason})")
         except Exception as exc:
             failures += 1
             print(f"Failed: {pdf_path}: {exc}")

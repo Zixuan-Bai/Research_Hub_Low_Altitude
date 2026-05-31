@@ -23,6 +23,7 @@ REQUIRED_FILES = [
     ".gitignore",
     ".env.example",
     "requirements.txt",
+    "configs/context_sources.json",
     "configs/pipeline.json",
     "codex_refactor_request_low_altitude_research_hub.md",
     "data/items.jsonl",
@@ -52,17 +53,9 @@ ALLOWED_EMPTY_FILES = {
     "outputs/weekly/.gitkeep",
 }
 
-ITEM_STATUSES = {
-    "new",
-    "kept",
-    "rejected",
-    "downloaded",
-    "read",
-    "summarized",
-    "used_in_synthesis",
-}
 REVIEW_STATUSES = {"new", "kept", "rejected", "downloaded"}
 PROCESS_STATUSES = {"unread", "read", "summarized", "used_in_synthesis"}
+METADATA_STATUSES = {"auto", "needs_review", "verified"}
 
 
 def validate_jsonl(path: Path, errors: list[str]) -> None:
@@ -76,15 +69,17 @@ def validate_jsonl(path: Path, errors: list[str]) -> None:
         except json.JSONDecodeError as exc:
             errors.append(f"Invalid JSONL at {path}:{index}: {exc}")
             continue
-        for field in ["id", "title", "source_type", "topic", "status", "created_at", "updated_at"]:
+        for field in ["id", "title", "source_type", "topic", "review_status", "process_status", "metadata_status", "created_at", "updated_at"]:
             if not item.get(field):
                 errors.append(f"Missing item field `{field}` at {path}:{index}")
-        if item.get("status") not in ITEM_STATUSES:
-            errors.append(f"Invalid status `{item.get('status')}` at {path}:{index}")
-        if item.get("review_status") and item.get("review_status") not in REVIEW_STATUSES:
+        if "status" in item:
+            errors.append(f"Legacy field `status` must be removed at {path}:{index}")
+        if item.get("review_status") not in REVIEW_STATUSES:
             errors.append(f"Invalid review_status `{item.get('review_status')}` at {path}:{index}")
-        if item.get("process_status") and item.get("process_status") not in PROCESS_STATUSES:
+        if item.get("process_status") not in PROCESS_STATUSES:
             errors.append(f"Invalid process_status `{item.get('process_status')}` at {path}:{index}")
+        if item.get("metadata_status") not in METADATA_STATUSES:
+            errors.append(f"Invalid metadata_status `{item.get('metadata_status')}` at {path}:{index}")
 
 
 def main() -> int:

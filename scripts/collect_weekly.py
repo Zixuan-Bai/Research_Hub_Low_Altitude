@@ -15,6 +15,7 @@ def main() -> int:
     parser.add_argument("--providers", default="", help="Comma-separated providers. Defaults to config discovery_providers.")
     parser.add_argument("--limit-per-keyword", type=int, default=None, help="Metadata results per keyword/provider.")
     parser.add_argument("--max-keywords", type=int, default=None, help="Maximum seed keywords per topic.")
+    parser.add_argument("--context-config", default=str(hub.DEFAULT_CONTEXT_CONFIG), help="Context source JSON for RSS/manual URLs.")
     parser.add_argument("--date", default=None, help="Digest date, YYYY-MM-DD. Defaults to today.")
     parser.add_argument("--dry-run", action="store_true", help="Show planned work without network calls or file writes.")
     args = parser.parse_args()
@@ -33,6 +34,7 @@ def main() -> int:
         print(f"Providers: {', '.join(providers)}")
         print(f"Limit per keyword: {limit}")
         print(f"Max keywords per topic: {max_keywords}")
+        print(f"Context sources: {args.context_config}")
         return 0
 
     run_items = []
@@ -41,6 +43,10 @@ def main() -> int:
         run_items.extend(topic_items)
         query_data = hub.parse_simple_query_yaml(query_file)
         print(f"Collected {len(topic_items)} item(s) for {query_data['topic']}.")
+    context_items = hub.collect_context_sources(Path(args.context_config))
+    run_items.extend(context_items)
+    if context_items:
+        print(f"Collected {len(context_items)} context item(s) from RSS/manual URL sources.")
 
     all_items, changed_items = hub.upsert_items(run_items)
     digest_path = hub.write_weekly_digest(all_items, changed_items, args.date)
@@ -53,4 +59,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

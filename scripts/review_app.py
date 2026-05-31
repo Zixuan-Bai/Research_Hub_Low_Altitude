@@ -1,13 +1,10 @@
-"""Local Streamlit review surface for data/items.jsonl.
-
-This app is intentionally thin: data/items.jsonl remains the canonical store,
-and the app only helps the user make lifecycle decisions without editing JSONL.
-"""
+"""Local Streamlit review surface for data/items.jsonl."""
 
 from __future__ import annotations
 
 import subprocess
 import sys
+from collections import Counter, defaultdict
 from pathlib import Path
 
 import research_hub_lib as hub
@@ -15,27 +12,23 @@ import research_hub_lib as hub
 
 REVIEW_STATUS_OPTIONS = ["new", "kept", "downloaded", "rejected"]
 PROCESS_STATUS_OPTIONS = ["unread", "read", "summarized", "used_in_synthesis"]
-ACTION_LABELS = {
-    "kept": "Keep",
-    "rejected": "Reject",
-    "downloaded": "Downloaded",
-}
-ACTION_HELP = {
-    "kept": "保留观察。表示这个条目值得继续跟踪，但还没有读取全文。",
-    "rejected": "暂不关注。表示这个条目与当前研究情报目标不够相关。",
-    "downloaded": "PDF 已经合法下载到本地，等待后续读取。",
+SOURCE_TYPE_OPTIONS = ["paper", "news", "standard", "policy", "whitepaper", "report"]
+METADATA_STATUS_LABELS = {
+    "auto": "自动元数据",
+    "needs_review": "元数据待复核",
+    "verified": "元数据已人工确认",
 }
 STATUS_LABELS = {
-    "new": "未处理",
+    "new": "新条目",
     "kept": "保留",
     "downloaded": "已下载",
-    "read": "已读取",
-    "summarized": "已生成笔记",
-    "used_in_synthesis": "已用于综合",
     "rejected": "已拒绝",
-    "unread": "未读取",
+    "unread": "未读",
+    "read": "已生成文本草稿",
+    "summarized": "已精读摘要",
+    "used_in_synthesis": "已进入主题综合",
 }
-SOURCE_TYPE_OPTIONS = ["paper", "news", "standard", "policy", "whitepaper", "report"]
+ACTION_LABELS = {"kept": "Keep", "rejected": "Reject", "downloaded": "Downloaded"}
 
 
 def require_streamlit():
@@ -56,67 +49,6 @@ def rerun(st) -> None:
         st.experimental_rerun()
 
 
-def update_review_status(item_id: str, status: str) -> None:
-    items = hub.load_items()
-    for item in items:
-        if item.get("id") == item_id:
-            item["review_status"] = status
-            item.setdefault("metadata", {})["human_decision_at"] = hub.now_iso()
-            hub.update_item(item)
-            hub.write_review_dashboard(hub.load_items())
-            return
-
-
-def update_process_status(item_id: str, status: str) -> None:
-    items = hub.load_items()
-    for item in items:
-        if item.get("id") == item_id:
-            item["process_status"] = status
-            item.setdefault("metadata", {})["manual_process_status_updated_at"] = hub.now_iso()
-            hub.update_item(item)
-            hub.write_review_dashboard(hub.load_items())
-            return
-
-
-def update_topic(item_id: str, topic: str) -> None:
-    items = hub.load_items()
-    for item in items:
-        if item.get("id") == item_id:
-            item["topic"] = topic
-            item.setdefault("metadata", {})["topic_reviewed_at"] = hub.now_iso()
-            hub.update_item(item)
-            hub.write_review_dashboard(hub.load_items())
-            return
-
-
-def update_metadata(item_id: str, top_level: dict, metadata_updates: dict) -> None:
-    items = hub.load_items()
-    for item in items:
-        if item.get("id") != item_id:
-            continue
-        for key, value in top_level.items():
-            item[key] = value.strip() if isinstance(value, str) else value
-        metadata = item.setdefault("metadata", {})
-        for key, value in metadata_updates.items():
-            value = value.strip() if isinstance(value, str) else value
-            if value in ("", None):
-                metadata.pop(key, None)
-            else:
-                metadata[key] = value
-        metadata["manual_metadata_updated_at"] = hub.now_iso()
-        hub.update_item(item)
-        hub.write_review_dashboard(hub.load_items())
-        return
-
-
-def latest_weekly_digest() -> Path | None:
-    weekly_dir = Path("outputs/weekly")
-    if not weekly_dir.exists():
-        return None
-    files = sorted(weekly_dir.glob("*.md"), reverse=True)
-    return files[0] if files else None
-
-
 def run_script(args: list[str], timeout: int = 1800) -> tuple[int, str]:
     completed = subprocess.run(
         [sys.executable, *args],
@@ -129,6 +61,62 @@ def run_script(args: list[str], timeout: int = 1800) -> tuple[int, str]:
     return completed.returncode, output
 
 
+def latest_weekly_digest() -> Path | None:
+    weekly_dir = Path("outputs/weekly")
+    files = sorted(weekly_dir.glob("*.md"), reverse=True) if weekly_dir.exists() else []
+    return files[0] if files else None
+
+
+def update_review_status(item_id: str, status: str) -> None:
+    for item in hub.load_items():
+        if item.get("id") == item_id:
+            item["review_status"] = status
+            item.setdefault("metadata", {})["human_decision_at"] = hub.now_iso()
+            hub.update_item(item)
+            hub.write_review_dashboard(hub.load_items())
+            return
+
+
+def update_process_status(item_id: str, status: str) -> None:
+    for item in hub.load_items():
+        if item.get("id") == item_id:
+            item["process_status"] = status
+            item.setdefault("metadata", {})["manual_process_status_updated_at"] = hub.now_iso()
+            hub.update_item(item)
+            hub.write_review_dashboard(hub.load_items())
+            return
+
+
+def update_topic(item_id: str, topic: str) -> None:
+    for item in hub.load_items():
+        if item.get("id") == item_id:
+            item["topic"] = topic
+            item.setdefault("metadata", {})["topic_reviewed_at"] = hub.now_iso()
+            hub.update_item(item)
+            hub.write_review_dashboard(hub.load_items())
+            return
+
+
+def update_metadata(item_id: str, top_level: dict, metadata_updates: dict) -> None:
+    for item in hub.load_items():
+        if item.get("id") != item_id:
+            continue
+        for key, value in top_level.items():
+            item[key] = value.strip() if isinstance(value, str) else value
+        metadata = item.setdefault("metadata", {})
+        for key, value in metadata_updates.items():
+            value = value.strip() if isinstance(value, str) else value
+            if value in ("", None):
+                metadata.pop(key, None)
+            else:
+                metadata[key] = value
+        item["metadata_status"] = "verified"
+        metadata["manual_metadata_updated_at"] = hub.now_iso()
+        hub.update_item(item)
+        hub.write_review_dashboard(hub.load_items())
+        return
+
+
 def item_matches(item: dict, review_filter: str, process_filter: str, topic: str, source_type: str, query: str) -> bool:
     if review_filter != "all" and hub.review_status(item) != review_filter:
         return False
@@ -138,22 +126,20 @@ def item_matches(item: dict, review_filter: str, process_filter: str, topic: str
         return False
     if source_type != "all" and item.get("source_type") != source_type:
         return False
-    if query:
-        haystack = " ".join(
-            [
-                str(item.get("title", "")),
-                str(item.get("abstract_or_snippet", "")),
-                str(item.get("source", "")),
-                str(item.get("topic", "")),
-            ]
-        ).lower()
-        return query.lower() in haystack
-    return True
+    if not query:
+        return True
+    haystack = " ".join(
+        [
+            str(item.get("title", "")),
+            str(item.get("abstract_or_snippet", "")),
+            str(item.get("source", "")),
+            str(item.get("topic", "")),
+        ]
+    ).lower()
+    return query.lower() in haystack
 
 
 def compact_authors(authors: str, max_authors: int = 4) -> str:
-    if not authors:
-        return ""
     parts = [part.strip() for part in authors.split(";") if part.strip()]
     if not parts:
         return authors
@@ -164,10 +150,11 @@ def compact_authors(authors: str, max_authors: int = 4) -> str:
 
 def bibliographic_line(item: dict) -> str:
     metadata = item.get("metadata") or {}
-    year = metadata.get("year") or item.get("date") or "year unknown"
-    venue = metadata.get("venue") or metadata.get("publisher") or item.get("source") or "venue/source unknown"
+    pieces = [
+        str(metadata.get("year") or item.get("date") or "year unknown"),
+        str(metadata.get("venue") or metadata.get("publisher") or item.get("source") or "source unknown"),
+    ]
     authors = compact_authors(str(metadata.get("authors") or ""))
-    pieces = [str(year), str(venue)]
     if authors:
         pieces.append(authors)
     doi = metadata.get("doi")
@@ -176,62 +163,42 @@ def bibliographic_line(item: dict) -> str:
     return " | ".join(piece for piece in pieces if piece)
 
 
-def internal_state_line(item: dict) -> str:
-    relevance = (item.get("metadata") or {}).get("relevance_reason", "")
-    authority = item.get("authority_score", "")
-    authority_reason = (item.get("metadata") or {}).get("authority_reason", "")
-    pieces = [
-        f"review `{hub.review_status(item)}` ({STATUS_LABELS.get(hub.review_status(item), '')})",
-        f"process `{hub.process_status(item)}` ({STATUS_LABELS.get(hub.process_status(item), '')})",
-        f"`{item.get('topic', 'unknown')}`",
-        str(item.get("source_type", "unknown")),
-        f"relevance {item.get('score', '')}",
-    ]
-    if authority:
-        pieces.append(f"authority {authority}")
-    if relevance:
-        pieces.append(str(relevance))
-    if authority_reason:
-        pieces.append(str(authority_reason))
-    return " | ".join(pieces)
-
-
-def status_badge(st, item: dict) -> None:
-    labels = {
-        "new": ":gray[未处理]",
-        "kept": ":blue[已保留]",
-        "downloaded": ":green[已下载]",
-        "read": ":green[已读取]",
-        "summarized": ":green[已生成笔记]",
-        "used_in_synthesis": ":violet[已用于综合]",
-        "rejected": ":red[已拒绝]",
-    }
-    review = hub.review_status(item)
-    process = hub.process_status(item)
-    st.markdown(f"人工状态：**{labels.get(review, review)}**　流程状态：**{labels.get(process, process)}**")
+def render_note_preview(st, note_path_value: str) -> None:
+    note_path = Path(note_path_value)
+    if not note_path.exists():
+        st.caption(f"note_path 已记录但文件不存在：`{note_path_value}`")
+        return
+    text = note_path.read_text(encoding="utf-8", errors="replace")
+    with st.expander("Item Note 预览", expanded=False):
+        st.markdown(text[:6000] + ("\n\n...（已截断）" if len(text) > 6000 else ""))
 
 
 def render_item(st, item: dict) -> None:
+    metadata = item.get("metadata") or {}
     title = item.get("title") or "未命名条目"
     with st.container(border=True):
         st.markdown(f"### {title}")
         st.caption(bibliographic_line(item))
-        st.caption(internal_state_line(item))
-        url = item.get("url")
-        pdf_url = item.get("pdf_url")
-        if url:
-            st.markdown(f"[Source]({url})")
-        if pdf_url:
-            st.markdown(f"[PDF]({pdf_url})")
-        snippet = item.get("abstract_or_snippet", "")
-        if snippet:
-            st.write(snippet[:1200] + ("..." if len(snippet) > 1200 else ""))
-        note_path = item.get("note_path")
-        if note_path:
-            st.code(note_path, language="text")
+        st.caption(
+            f"topic `{item.get('topic', 'unknown')}` | source_type `{item.get('source_type', 'unknown')}` | "
+            f"review `{hub.review_status(item)}` | process `{hub.process_status(item)}` | "
+            f"metadata `{hub.metadata_status(item)}`"
+        )
+        st.markdown(
+            f"relevance **{item.get('score', 'unknown')}** | authority **{item.get('authority_score', 'unknown')}** | "
+            f"{METADATA_STATUS_LABELS.get(hub.metadata_status(item), hub.metadata_status(item))}"
+        )
+        if item.get("url"):
+            st.markdown(f"[Source]({item['url']})")
+        if item.get("pdf_url"):
+            st.markdown(f"[PDF]({item['pdf_url']})")
+        if item.get("abstract_or_snippet"):
+            st.write(str(item["abstract_or_snippet"])[:1200])
+        if item.get("note_path"):
+            st.code(str(item["note_path"]), language="text")
+            render_note_preview(st, str(item["note_path"]))
 
         with st.expander("编辑 metadata", expanded=False):
-            metadata = item.get("metadata") or {}
             with st.form(key=f"metadata-form:{item['id']}"):
                 edited_title = st.text_input("Title", value=str(item.get("title", "")))
                 edited_year = st.text_input("Year", value=str(metadata.get("year") or item.get("date") or ""))
@@ -246,7 +213,7 @@ def render_item(st, item: dict) -> None:
                 source_index = SOURCE_TYPE_OPTIONS.index(current_source_type) if current_source_type in SOURCE_TYPE_OPTIONS else 0
                 edited_source_type = st.selectbox("Source type", SOURCE_TYPE_OPTIONS, index=source_index)
                 edited_snippet = st.text_area("Abstract / snippet", value=str(item.get("abstract_or_snippet") or ""), height=140)
-                submitted = st.form_submit_button("保存 metadata")
+                submitted = st.form_submit_button("保存 metadata 并标记 verified")
             if submitted:
                 update_metadata(
                     item["id"],
@@ -270,28 +237,166 @@ def render_item(st, item: dict) -> None:
                 st.toast("metadata 已保存")
                 rerun(st)
 
-        status_badge(st, item)
         columns = st.columns(len(ACTION_LABELS))
         for column, (status, label) in zip(columns, ACTION_LABELS.items()):
-            disabled = hub.review_status(item) == status
-            button_type = "primary" if disabled else "secondary"
-            if column.button(label, key=f"{item['id']}:{status}", help=ACTION_HELP.get(status, ""), disabled=disabled, type=button_type):
+            if column.button(label, key=f"{item['id']}:{status}", disabled=hub.review_status(item) == status):
                 update_review_status(item["id"], status)
                 st.toast(f"已更新为 {STATUS_LABELS.get(status, status)}")
                 rerun(st)
 
         with st.expander("危险操作：手动修改流程状态", expanded=False):
-            st.warning("流程状态通常由 Kimi 阅读和 topic synthesis 自动维护。只有确认数据库状态错误时才手动修改。")
             selected_process = st.selectbox(
-                "流程状态",
+                "process_status",
                 PROCESS_STATUS_OPTIONS,
                 index=PROCESS_STATUS_OPTIONS.index(hub.process_status(item)),
                 key=f"process-select:{item['id']}",
             )
-            confirmed = st.checkbox("我确认要覆盖流程状态", key=f"process-confirm:{item['id']}")
-            if st.button("覆盖流程状态", key=f"process-update:{item['id']}", disabled=not confirmed):
+            confirmed = st.checkbox("确认覆盖 process_status", key=f"process-confirm:{item['id']}")
+            if st.button("覆盖 process_status", key=f"process-update:{item['id']}", disabled=not confirmed):
                 update_process_status(item["id"], selected_process)
                 st.toast(f"流程状态已更新为 {STATUS_LABELS.get(selected_process, selected_process)}")
+                rerun(st)
+
+
+def render_items_tab(st, items: list[dict], filters: dict) -> None:
+    filtered = [
+        item
+        for item in items
+        if item_matches(
+            item,
+            filters["review_filter"],
+            filters["process_filter"],
+            filters["topic"],
+            filters["source_type"],
+            filters["query"],
+        )
+    ]
+    filtered = sorted(filtered, key=lambda row: int(row.get("score") or 0), reverse=True)
+    st.caption(
+        f"过滤：review={filters['review_filter']}; process={filters['process_filter']}; "
+        f"topic={filters['topic']}; source_type={filters['source_type']}; search={filters['query'] or '(empty)'}"
+    )
+    st.write(f"{len(filtered)} / {len(items)} items")
+    for item in filtered:
+        render_item(st, item)
+
+
+def render_weekly_digest_tab(st) -> None:
+    digest = latest_weekly_digest()
+    if not digest:
+        st.info("尚未生成 weekly digest。")
+        return
+    st.caption(digest.as_posix())
+    st.markdown(digest.read_text(encoding="utf-8", errors="replace"))
+
+
+def topic_counts(items: list[dict]) -> dict[str, Counter]:
+    counts: dict[str, Counter] = defaultdict(Counter)
+    for item in items:
+        topic = str(item.get("topic") or "unknown")
+        counts[topic][hub.review_status(item)] += 1
+        counts[topic][hub.process_status(item)] += 1
+    return counts
+
+
+def render_topic_overview_tab(st, items: list[dict]) -> None:
+    counts = topic_counts(items)
+    headers = ["topic", "new", "kept", "downloaded", "summarized", "used_in_synthesis"]
+    rows = [{header: topic if header == "topic" else counts[topic][header] for header in headers} for topic in sorted(counts)]
+    st.dataframe(rows, hide_index=True, use_container_width=True)
+    topics = [row["topic"] for row in rows]
+    if not topics:
+        st.info("暂无 topic 数据。")
+        return
+    selected_topic = st.selectbox("选择 topic 运行 synthesis", topics)
+    min_notes = st.number_input("min-notes", min_value=1, max_value=50, value=10, step=1)
+    dry_run = st.checkbox("只预览命令，不写文件", value=False, key="synthesis-dry-run")
+    if st.button("运行 topic synthesis"):
+        args = ["scripts/synthesize_topic.py", "--topic", selected_topic, "--min-notes", str(min_notes)]
+        if dry_run:
+            args.append("--dry-run")
+        with st.spinner("正在运行 topic synthesis..."):
+            code, output = run_script(args, timeout=3600)
+        st.code(output or "(no output)", language="text")
+        if code == 0:
+            st.success("完成")
+        else:
+            st.error(f"失败，退出码 {code}")
+
+
+def render_collect_tab(st) -> None:
+    st.subheader("每周情报收集")
+    collect_topic = st.selectbox("收集 topic", ["all", *sorted(hub.topic_key_to_slug(hub.load_config()).keys())])
+    dry_run = st.checkbox("只预览，不写文件", value=False)
+    if st.button("运行收集"):
+        args = ["scripts/collect_weekly.py", "--topic", collect_topic]
+        if dry_run:
+            args.append("--dry-run")
+        with st.spinner("正在收集，可能需要几分钟..."):
+            code, output = run_script(args)
+        st.code(output or "(no output)", language="text")
+        if code == 0:
+            st.success("完成")
+        else:
+            st.error(f"失败，退出码 {code}")
+
+
+def render_batch_tab(st) -> None:
+    st.subheader("批量读取本地 PDF")
+    pdf_dir = st.text_input("PDF 文件夹或单个 PDF", "literature/inbox/papers")
+    batch_topic = st.selectbox("Topic", ["auto", *sorted(hub.topic_key_to_slug(hub.load_config()).keys())])
+    max_items = st.number_input("本次最多读取篇数", min_value=0, max_value=100, value=3, step=1)
+    mode = st.selectbox("读取模式", ["auto", "metadata-only", "text-draft", "kimi"])
+    providers = st.text_input("Metadata providers", "openalex,crossref,semantic_scholar")
+    force = st.checkbox("强制重读已经生成 note 的 PDF", value=False)
+    preview_args = [
+        "scripts/batch_read_pdfs.py",
+        "--pdf-dir",
+        pdf_dir,
+        "--topic",
+        batch_topic,
+        "--providers",
+        providers,
+        "--max-items",
+        str(max_items),
+        "--mode",
+        mode,
+        "--dry-run",
+    ]
+    if force:
+        preview_args.append("--force")
+    if st.button("扫描待读取 PDF"):
+        code, output = run_script(preview_args)
+        st.code(output or "(no output)", language="text")
+        if code != 0:
+            st.error(f"扫描失败，退出码 {code}")
+    confirm = st.checkbox("确认开始批量读取")
+    if st.button("开始批量读取", disabled=not confirm):
+        run_args = [arg for arg in preview_args if arg != "--dry-run"]
+        with st.spinner("正在读取 PDF..."):
+            code, output = run_script(run_args, timeout=7200)
+        st.code(output or "(no output)", language="text")
+        if code == 0:
+            st.success("批量读取完成")
+        else:
+            st.error(f"批量读取结束但有失败，退出码 {code}")
+
+
+def render_topic_review_tab(st, items: list[dict]) -> None:
+    pending = [item for item in items if item.get("topic") == hub.NEEDS_TOPIC_REVIEW]
+    st.write(f"{len(pending)} items need topic review")
+    known_topics = sorted(set(hub.topic_key_to_slug(hub.load_config()).values()))
+    for item in pending:
+        with st.container(border=True):
+            st.markdown(f"### {item.get('title', '未命名条目')}")
+            st.caption(f"id `{item.get('id')}` | review `{hub.review_status(item)}` | process `{hub.process_status(item)}`")
+            if item.get("abstract_or_snippet"):
+                st.write(str(item.get("abstract_or_snippet"))[:1000])
+            chosen = st.selectbox("分配到已有 topic", known_topics, key=f"topic-select:{item['id']}")
+            custom = st.text_input("或输入新 topic slug", key=f"topic-custom:{item['id']}")
+            target = custom.strip() or chosen
+            if st.button("确认 topic", key=f"topic-approve:{item['id']}"):
+                update_topic(item["id"], target)
                 rerun(st)
 
 
@@ -304,116 +409,33 @@ def main() -> None:
     source_types = sorted({item.get("source_type", "unknown") for item in items if item.get("source_type")})
 
     st.title("低空研究情报工作台")
-    st.caption("所有状态仍写入 data/items.jsonl；界面只提供更低成本的操作入口。")
+    st.caption("Canonical store: `data/items.jsonl`。界面只提供复核、预览和轻量脚本入口。")
 
     with st.sidebar:
-        review_filter = st.selectbox("Review status", ["all", *REVIEW_STATUS_OPTIONS], index=0)
-        process_filter = st.selectbox("Process status", ["all", *PROCESS_STATUS_OPTIONS], index=0)
-        topic = st.selectbox("Topic", ["all", *topics])
-        source_type = st.selectbox("Source type", ["all", *source_types])
-        query = st.text_input("Search")
+        filters = {
+            "review_filter": st.selectbox("Review status", ["all", *REVIEW_STATUS_OPTIONS], index=0),
+            "process_filter": st.selectbox("Process status", ["all", *PROCESS_STATUS_OPTIONS], index=0),
+            "topic": st.selectbox("Topic", ["all", *topics]),
+            "source_type": st.selectbox("Source type", ["all", *source_types]),
+            "query": st.text_input("Search"),
+        }
         digest = latest_weekly_digest()
         if digest:
             st.markdown(f"Latest weekly digest: `{digest.as_posix()}`")
-        st.markdown("Canonical store: `data/items.jsonl`")
 
-    review_tab, collect_tab, batch_tab, topic_tab = st.tabs(["复核条目", "每周收集", "批量读 PDF", "Topic 审批"])
-
-    with review_tab:
-        with st.expander("按钮和 score 说明", expanded=False):
-            st.markdown(
-                """
-- `Keep`：保留观察，后续可能下载或阅读。
-- `Reject`：暂不关注，不进入后续阅读队列。
-- `Downloaded`：PDF 已下载到本地，等待读取。
-
-`relevance` 是自动相关性粗分，不是论文质量分。当前主要根据 topic 配置里的 `required_terms_any` 命中数量计算，最多 5 分；命中越多，越适合优先人工 review。
-
-`authority` 是来源权威性粗分，也不是论文质量分。它根据 venue、publisher、source_type、URL 等启发式估计来源可信度，例如 IEEE Transactions / Nature / Science / 标准政策类来源会更高，预印本或来源不明会更低。
-
-`review_status` 是人工层，可以随时改。`process_status` 是流程层，默认由自动流程更新：Kimi 读完并写出 note 后自动进入 `summarized`；topic synthesis 使用后自动进入 `used_in_synthesis`。如果要手动覆盖流程层，需要在危险操作区确认。
-                """
-            )
-        filtered = [item for item in items if item_matches(item, review_filter, process_filter, topic, source_type, query)]
-        filtered = sorted(filtered, key=lambda row: int(row.get("score") or 0), reverse=True)
-        st.caption(f"当前过滤：Review={review_filter}; Process={process_filter}; Topic={topic}; Source type={source_type}; Search={query or '(empty)'}")
-        st.write(f"{len(filtered)} / {len(items)} items")
-        for item in filtered:
-            render_item(st, item)
-
-    with collect_tab:
-        st.subheader("每周情报收集")
-        collect_topic = st.selectbox("收集 topic", ["all", *sorted(hub.topic_key_to_slug(hub.load_config()).keys())])
-        dry_run = st.checkbox("只预览，不写文件", value=False)
-        if st.button("运行收集"):
-            args = ["scripts/collect_weekly.py", "--topic", collect_topic]
-            if dry_run:
-                args.append("--dry-run")
-            with st.spinner("正在收集，可能需要几分钟..."):
-                code, output = run_script(args)
-            st.code(output or "(no output)", language="text")
-            if code == 0:
-                st.success("完成")
-            else:
-                st.error(f"失败，退出码 {code}")
-
-    with batch_tab:
-        st.subheader("批量读取本地 PDF")
-        st.caption("默认跳过已经生成过 note 的 PDF。未知 topic 会标记为 needs_topic_review，等待人工审批。")
-        pdf_dir = st.text_input("PDF 文件夹或单个 PDF", "literature/inbox/papers")
-        batch_topic = st.selectbox("Topic", ["auto", *sorted(hub.topic_key_to_slug(hub.load_config()).keys())])
-        max_items = st.number_input("本次最多读取篇数", min_value=0, max_value=100, value=3, step=1)
-        providers = st.text_input("Metadata providers", "openalex,crossref,semantic_scholar")
-        force = st.checkbox("强制重读已生成 note 的 PDF", value=False)
-        preview_args = [
-            "scripts/batch_read_pdfs.py",
-            "--pdf-dir",
-            pdf_dir,
-            "--topic",
-            batch_topic,
-            "--providers",
-            providers,
-            "--max-items",
-            str(max_items),
-            "--dry-run",
-        ]
-        if force:
-            preview_args.append("--force")
-        if st.button("扫描待读取 PDF"):
-            code, output = run_script(preview_args)
-            st.code(output or "(no output)", language="text")
-            if code != 0:
-                st.error(f"扫描失败，退出码 {code}")
-
-        st.warning("真正批量读取会调用 Kimi/Moonshot API，并可能产生费用。建议先扫描，再小批量读取。")
-        confirm = st.checkbox("确认开始批量读取")
-        if st.button("开始批量读取", disabled=not confirm):
-            run_args = [arg for arg in preview_args if arg != "--dry-run"]
-            with st.spinner("正在读取 PDF。每篇可能需要较长时间..."):
-                code, output = run_script(run_args, timeout=7200)
-            st.code(output or "(no output)", language="text")
-            if code == 0:
-                st.success("批量读取完成")
-            else:
-                st.error(f"批量读取结束但有失败，退出码 {code}")
-
-    with topic_tab:
-        st.subheader("待审批 topic")
-        pending = [item for item in items if item.get("topic") == hub.NEEDS_TOPIC_REVIEW]
-        st.write(f"{len(pending)} items need topic review")
-        known_topics = sorted(set(hub.topic_key_to_slug(hub.load_config()).values()))
-        for item in pending:
-            with st.container(border=True):
-                st.markdown(f"### {item.get('title', '未命名条目')}")
-                st.caption(f"id `{item.get('id')}` | review `{hub.review_status(item)}` | process `{hub.process_status(item)}`")
-                if item.get("abstract_or_snippet"):
-                    st.write(item.get("abstract_or_snippet")[:1000])
-                chosen = st.selectbox("分配到已有 topic", known_topics, key=f"topic-select:{item['id']}")
-                custom = st.text_input("或输入新候选 topic slug（需人工确认后才使用）", key=f"topic-custom:{item['id']}")
-                target = custom.strip() or chosen
-                if st.button("确认 topic", key=f"topic-approve:{item['id']}"):
-                    update_topic(item["id"], target)
-                    rerun(st)
+    tabs = st.tabs(["复核条目", "Weekly Digest", "Topic Overview", "每周收集", "批量读 PDF", "Topic 审核"])
+    with tabs[0]:
+        render_items_tab(st, items, filters)
+    with tabs[1]:
+        render_weekly_digest_tab(st)
+    with tabs[2]:
+        render_topic_overview_tab(st, items)
+    with tabs[3]:
+        render_collect_tab(st)
+    with tabs[4]:
+        render_batch_tab(st)
+    with tabs[5]:
+        render_topic_review_tab(st, items)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,14 @@
+{
+  "rss": [],
+  "urls": [
+    {
+      "title": "FAA Remote Identification of Drones",
+      "url": "https://www.faa.gov/uas/getting_started/remote_id",
+      "source": "FAA",
+      "source_type": "policy",
+      "topic": "remote_id_broadcast_capacity",
+      "snippet": "Remote ID policy and compliance background for unmanned aircraft systems.",
+      "score": 2
+    }
+  ]
+}
