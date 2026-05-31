@@ -6,15 +6,17 @@ env:
 on:
   push:
     paths:
+      - "data/**"
       - "docs/**"
-      - "literature/**"
-      - "prompts/**"
-      - "route_cards/**"
-      - "rubrics/**"
+      - "literature/queries/**"
+      - "notes/**"
+      - "outputs/**"
       - "scripts/**"
       - "topics/**"
       - "AGENTS.md"
       - "README.md"
+      - "requirements.txt"
+      - "codex_refactor_request_low_altitude_research_hub.md"
       - ".github/workflows/validate.yml"
   pull_request:
   workflow_dispatch:
@@ -29,13 +31,9 @@ jobs:
           python-version: "3.11"
       - name: Validate hub skeleton
         run: python scripts/validate_hub.py
-      - name: Dry-run unattended pipeline
-        run: python scripts/run_pipeline.py --dry-run
-      - name: Dry-run literature search
-        run: python scripts/search_literature.py --query-file literature/queries/remote_id.yaml --dry-run
-      - name: Dry-run OA PDF fetch
-        run: python scripts/fetch_open_access_pdfs.py --dry-run
-      - name: Dry-run local PDF import
-        run: python scripts/import_local_pdfs.py --dry-run
-      - name: Dry-run route check
-        run: python scripts/rank_routes.py --dry-run
+      - name: Compile scripts
+        run: python -m py_compile scripts/research_hub_lib.py scripts/batch_read_pdfs.py scripts/collect_weekly.py scripts/read_item.py scripts/review_app.py scripts/synthesize_topic.py scripts/validate_hub.py
+      - name: Dry-run weekly collection
+        run: python scripts/collect_weekly.py --topic remote_id --dry-run
+      - name: Dry-run topic synthesis
+        run: python scripts/synthesize_topic.py --topic remote_id --dry-run

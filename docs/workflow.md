@@ -1,160 +1,91 @@
-# Research Hub Workflow
+# 工作流
 
-本文件定义 Level 0 research-intelligence hub 的基本工作流。任何输出都应服务于选题判断，而不是直接形成论文结论。
+本仓库只保留轻量研究情报主线。
 
-## 1. 发现候选论文
-
-优先从 query YAML 开始：
-
-```powershell
-python scripts/search_literature.py --query-file literature/queries/remote_id.yaml --dry-run
+```text
+每周收集
+-> 打开中文周报和本地 review app / review dashboard
+-> 人工判断 keep / reject / download / read
+-> 对选中的 PDF 生成中文笔记
+-> 材料足够后手动 topic synthesis
 ```
 
-确认查询设置后，可以去掉 `--dry-run`。脚本会写入：
-
-- `literature/database/paper_candidates.csv`
-- `literature/database/acquisition_queue.csv`
-
-候选表只表示“值得检查”，不表示论文已经读过，也不表示方向有创新性。
-
-## 2. 获取 PDF
-
-开放 PDF 可以用：
+## 1. 每周收集
 
 ```powershell
-python scripts/fetch_open_access_pdfs.py --dry-run
+python scripts/collect_weekly.py --topic all
 ```
 
-脚本只处理 `access_status=open` 且有 `pdf_url` 的候选项。
+主要查看：
 
-没有开放 PDF 的文献进入 `acquisition_queue.csv`。这表示需要你通过学校、机构、作者主页或合法个人访问手动下载。如果下载成功，将 PDF 放入 `literature/inbox/papers/`。
+```text
+outputs/weekly/YYYY-MM-DD.md
+outputs/review_dashboard.md
+```
 
-## 3. 添加本地 PDF
+## 2. 本地复核
 
-1. 将 PDF 放入 `literature/inbox/papers/`，该目录默认不提交。
-2. 运行 `python scripts/import_local_pdfs.py --dry-run` 查看待登记文件。
-3. 手动确认 metadata 后再写入 `literature/database/papers.csv`。
-4. 不确定的字段必须留空或标为 `uncertain metadata`，禁止猜 DOI、venue、作者或年份。
+推荐使用 Streamlit 本地界面：
 
-## 4. 标记阅读状态
+```powershell
+pip install -r requirements.txt
+python -m streamlit run scripts/review_app.py
+```
 
-使用统一状态：
+该界面直接更新 `data/items.jsonl`，并重新生成 `outputs/review_dashboard.md`。如果暂时不用 Streamlit，就打开 `outputs/review_dashboard.md` 浏览条目，再少量手动调整状态。
 
-- `metadata only`
-- `abstract only`
-- `open PDF downloaded`
-- `needs user PDF`
-- `full-text parsed`
-- `human reviewed`
-- `uncertain metadata`
+界面包含四个常用区：
 
-阅读状态只能反映实际读到的材料，不代表论文质量。
+- 复核条目：处理 `review_status` 的 keep / reject / downloaded 三类人工状态；
+- 每周收集：临时补跑 `collect_weekly.py`；
+- 批量读 PDF：扫描并小批量读取 `literature/inbox/papers/`；
+- Topic 审批：处理 `needs_topic_review`，不自动新增方向。
 
-## 5. 创建 Paper Note
+每个条目卡片中的 `编辑 metadata` 会直接修改 `data/items.jsonl`。适合补全自动脚本没有拿到的 publisher、venue、authors、DOI 等字段。保存后会重新计算 `authority`。
 
-每篇论文使用 `literature/notes/paper_notes/template.md`。
+状态分两层：`review_status` 是人工决策层，可以随时改；`process_status` 是自动流程层，通常由 Kimi 阅读和 topic synthesis 自动更新。GUI 中修改流程层需要额外确认。
 
-笔记必须区分：
+复核条目的 `relevance` 只是自动相关性粗分：主要来自 topic 查询文件中 `required_terms_any` 的命中数量，最高 5 分。它不代表论文质量、创新性或可实施性，只用于排序优先 review 的条目。
 
-- `paper-supported`: 论文明确写出的内容；
-- `inferred`: 由多篇论文比较得出的推断；
-- `proposal`: 个人或 Codex 提出的延伸想法。
+复核条目的 `authority` 是来源权威性粗分：主要来自 venue、publisher、source_type 和 URL 的启发式判断。它帮助你优先看权威来源，但仍需要人工复核。
 
-如果没有全文，不要写全文级总结。
+## 3. 单篇阅读
 
-## 6. 评估 Source Quality
+```powershell
+python scripts/read_item.py "literature/inbox/papers/example.pdf" --topic remote_id
+```
 
-每篇论文和每条非论文信息源都必须评估来源质量。
+输出：
 
-高优先级来源包括：
+```text
+notes/items/{论文标题}.md
+```
 
-- IEEE Transactions / ACM Transactions；
-- Nature / Science family；
-- 顶级会议或领域公认强 venue；
-- 标准组织文档；
-- 政府/监管机构政策；
-- 工业界白皮书、公开技术报告、实际系统文档。
+笔记正文用中文。机器标签保留英文，用来保证证据边界清晰。
 
-低分区或弱审稿论文可以进入候选表，但在 synthesis 和 route card 中只能作为低置信证据，除非被其他高质量来源或实际系统证据支持。
+批量读取：
 
-## 7. 收集 Practical Context
+```powershell
+python scripts/batch_read_pdfs.py --pdf-dir literature/inbox/papers --topic auto --dry-run
+python scripts/batch_read_pdfs.py --pdf-dir literature/inbox/papers --topic auto --max-items 3
+```
 
-在生成 route card 前，需要补充非论文信息源：
+批量脚本会自动跳过已有 note 的 PDF。无法匹配现有 topic 的 PDF 会标记为 `needs_topic_review`，等待人工审批。
 
-- white papers；
-- standards；
-- deployed systems；
-- planned systems / industrial roadmaps；
-- policy documents；
-- regulatory news；
-- system performance reports。
+note 文件名与数据库中的论文标题保持一致；标题改变后，已有 note 会尝试同步重命名。
 
-这些材料记录在 `literature/database/context_sources.csv`，必要时使用 `literature/notes/context_notes/template.md` 建立笔记。
+## 4. Topic synthesis
 
-目标不是追热点，而是防止只被论文中的假设或概念牵引。
+```powershell
+python scripts/synthesize_topic.py --topic remote_id
+```
 
-## 8. 构建 Evidence Map
+如果已读材料不足，脚本只写 `needs-review` 提示，不生成研究 gap 或路线卡。
 
-Evidence map 用于把 claim 和 supporting papers 绑定起来。
+## 5. 不再默认做的事
 
-每条 claim 至少记录：
-
-- 支持论文；
-- 支持的非论文信息源；
-- evidence type；
-- evidence strength；
-- source quality；
-- practical relevance；
-- 不确定性和缺口。
-
-没有文献支撑的想法放入 `Unsupported or Speculative Ideas`，不能混入已验证结论。
-
-## 9. 综合 Topic
-
-topic synthesis 应从 paper notes 和 evidence map 出发，回答：
-
-1. 该方向研究什么；
-2. 已有方法和模型是什么；
-3. 常见假设是什么；
-4. 仍然缺什么；
-5. 与低空通信的关系是什么；
-6. 与用户既有基础的连接是什么；
-7. 高质量文献是否支持该方向；
-8. 产业、政策、标准或实际系统是否支持该方向；
-9. 哪些 route card 值得生成。
-
-不要因为方向有趣就假设它有创新性。
-
-## 10. 生成 Route Card
-
-route card 必须列出 supporting literature、practical context、gap、minimal model、possible method、expected evidence、baseline、risk 和 decision。
-
-如果 supporting literature 或 practical context 不足，decision 应为 `watch` 或 `reject`，不能建议创建实现仓库。
-
-## 11. 决定是否创建 Level 1 Repository
-
-只有同时满足以下条件，才可提出 repository proposal：
-
-1. clear research question；
-2. 至少 10 篇相关候选论文；
-3. 至少一部分核心 evidence 来自高质量来源；
-4. gap 由文献比较和 practical context 共同支持；
-5. minimal mathematical or simulation model 清晰；
-6. baselines 可获得或可构造；
-7. expected evidence 明确；
-8. implementation risk 可控；
-9. 人工确认该方向值得推进。
-
-## 12. Human Review Points
-
-以下节点需要人工审查：
-
-1. 候选文献列表完成后；
-2. paper notes 生成后；
-3. source quality 和 venue tier 标注后；
-4. practical context 收集后；
-5. topic brief 被视为可靠前；
-6. research gap 被接受前；
-7. route card 排名前；
-8. 创建 Level 1 repository 前；
-9. 任何 manuscript claim 写入前。
+- 不自动生成 route card；
+- 不自动排名 feasibility；
+- 不自动建议创建 Level 1 repo；
+- 不要求维护多个 CSV；
+- 不把 GitHub PR diff 当作主要 review 界面。

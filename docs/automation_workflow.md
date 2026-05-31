@@ -1,182 +1,65 @@
-# Automation Workflow
+# 自动化工作流
 
-本仓库的自动化目标是：默认让机器收集和初筛，人工只处理关键 gate。
+GitHub Actions 只负责每周收集和生成中文周报，不做最终研究判断。
 
-## Human Gate 最小化
+当前定时任务在 `.github/workflows/literature_pipeline.yml` 中配置为每周一 UTC 02:00 运行。换算到北京时间是每周一 10:00。
 
-你不需要逐篇手工标注所有字段。
+## 手动运行
 
-自动处理：
-
-- metadata search；
-- candidate dedup；
-- initial `venue_tier`；
-- initial `source_trust`；
-- initial `practical_relevance`；
-- acquisition queue；
-- review queue；
-- GitHub Actions validation。
-
-人工只处理：
-
-- 受限 PDF 是否下载；
-- review queue 中高价值或高风险条目；
-- practical context 是否足够；
-- topic synthesis 是否可信；
-- route card 是否进入下一阶段。
-
-## 两个本地入口
-
-发现候选论文和后续阅读不要混在一个脚本里。
-
-常态化发现入口：
-
-```powershell
-python scripts/run_discovery_pipeline.py --topic all --write-digest
-```
-
-候选 PDF 下载后的阅读入口：
-
-```powershell
-python scripts/run_reading_pipeline.py --topic remote_id
-```
-
-## 本地一键运行
-
-默认跑所有 topic，不下载 PDF：
-
-```powershell
-python scripts/run_discovery_pipeline.py
-```
-
-只跑某个 topic：
-
-```powershell
-python scripts/run_discovery_pipeline.py --topic remote_id
-```
-
-先看会执行什么：
-
-```powershell
-python scripts/run_discovery_pipeline.py --dry-run
-```
-
-如果想尝试下载 open-access PDFs：
-
-```powershell
-python scripts/run_discovery_pipeline.py --topic remote_id --download-pdfs
-```
-
-下载 PDF 后，运行：
-
-```powershell
-python scripts/run_reading_pipeline.py --topic remote_id
-```
-
-如果 PDF 是浏览器下载的随机文件名，先运行：
-
-```powershell
-python scripts/run_reading_pipeline.py --topic remote_id --rename-only --dry-run
-python scripts/run_reading_pipeline.py --topic remote_id --rename-only
-```
-
-脚本会用 DOI、PDF metadata title、可见文本和候选标题相似度做高置信匹配，再自动改成统一格式：
+在 GitHub Actions 中运行 `Weekly Research Intelligence`，可选择：
 
 ```text
-【人工备注】-2026-IEEE_TWC-short_title-candidate_id.pdf
-2026-IEEE_TWC-short_title-candidate_id.pdf
+topic = all
+topic = remote_id
+topic = directional_networking
 ```
 
-`【人工备注】` 是可选前缀，只给你自己看。你可以随时添加、删除或修改，流程会忽略它并在重命名时保留它。
-
-如果 PDF 不在候选库中，脚本会尝试用 PDF DOI/标题上网查 metadata，补入 `paper_candidates.csv` 后再重命名。可用 `--no-online-lookup` 关闭。
-
-如果没有对应 provider 的 API key，阅读脚本只会把任务加入 review queue，不会伪造阅读结果。
-
-默认阅读 provider 是 Kimi/Moonshot：
+本地等价命令：
 
 ```powershell
-$env:MOONSHOT_API_KEY="..."
-$env:KIMI_READING_MODEL="kimi-k2.6"
-python scripts/run_reading_pipeline.py --topic remote_id --provider kimi
+python scripts/collect_weekly.py --topic all
 ```
 
-更推荐复制 `.env.example` 为 `.env`，把真实 key 放在 `.env`。`.env` 已被 `.gitignore` 忽略。
+## 自动输出
 
-也可以切回 OpenAI：
+```text
+data/items.jsonl
+outputs/weekly/YYYY-MM-DD.md
+outputs/review_dashboard.md
+```
+
+自动 PR 只表示“有新情报需要 review”，不表示这些条目已经被认可。
+
+## 本地复核
+
+GitHub Actions 不负责人工判断。拉取自动 PR 或本地运行收集后，用本地面板标记状态：
 
 ```powershell
-$env:OPENAI_API_KEY="..."
-python scripts/run_reading_pipeline.py --topic remote_id --provider openai
+pip install -r requirements.txt
+python -m streamlit run scripts/review_app.py
 ```
 
-## 你主要看哪个文件
+状态仍写回 `data/items.jsonl`，不是写到外部系统。
 
-优先看：
+这个界面也可以临时补跑每周收集；但长期建议让 GitHub Actions 定时生成 PR，你只 review PR 中的周报和 dashboard。
+
+## 本地 PDF 阅读
+
+PDF 阅读不放在 GitHub Actions 里，因为它依赖本地 PDF 和私有 API key：
+
+```powershell
+python scripts/read_item.py "literature/inbox/papers/example.pdf" --topic remote_id
+```
+
+输出中文笔记到：
 
 ```text
-literature/database/review_queue.csv
+notes/items/{论文标题}.md
 ```
 
-它会告诉你哪些条目需要人工处理，例如：
+批量读取建议先在 GUI 中扫描，确认后每次小批量读取。如果用命令行：
 
-- venue tier unknown；
-- missing practical validation；
-- PDF requires user access；
-- low source trust。
-
-不要从 `paper_candidates.csv` 逐篇开始看。先看 review queue。
-
-## GitHub Actions 自动运行
-
-`.github/workflows/literature_pipeline.yml` 可以手动触发，也可以每周定时运行。
-
-它会：
-
-1. 运行 `scripts/run_discovery_pipeline.py --write-digest`；
-2. 如果 CSV 有变化，创建一个自动化分支；
-3. 提交变化；
-4. 尝试创建 PR。
-
-PR 是让你 review 的地方。你只需要看差异和 `review_queue.csv`。
-
-## Codex 托管使用方式
-
-Codex 不应该替代 deterministic pipeline。推荐分工：
-
-- GitHub Actions：无人值守跑脚本，产生候选表和 review queue。
-- Codex Cloud：读取 PR diff、review queue、paper candidates，给出筛选建议或改进脚本。
-- Local Codex：处理需要本地 PDF、私有文件、人工判断的任务。
-
-Codex Cloud 任务提示示例：
-
-```text
-Read AGENTS.md, docs/workflow.md, and docs/automation_workflow.md.
-Inspect literature/database/review_queue.csv and paper_candidates.csv.
-Summarize which candidates need human attention, which look high-value, and which need practical context.
-Do not invent paper claims. Do not create route cards yet.
+```powershell
+python scripts/batch_read_pdfs.py --pdf-dir literature/inbox/papers --topic auto --dry-run
+python scripts/batch_read_pdfs.py --pdf-dir literature/inbox/papers --topic auto --max-items 3
 ```
-
-另一个提示：
-
-```text
-Run the validation scripts and inspect the latest automated literature pipeline PR.
-If the pipeline produced low-quality candidates, improve query keywords or source-trust heuristics.
-Keep changes small and open a PR.
-```
-
-## Notion 角色
-
-不建议把 Notion 作为主数据库。GitHub repo 仍是 canonical source，Notion 是看板和 review surface。
-
-推荐用途：
-
-- 展示 `review_queue.csv`；
-- 阅读计划；
-- route card review board；
-- 每周进展摘要。
-- Download Queue；
-- Reading Queue；
-- Evidence Map Board。
-
-主数据仍在 GitHub repo。Notion 只是看板。

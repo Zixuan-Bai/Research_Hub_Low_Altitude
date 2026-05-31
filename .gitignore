@@ -4,7 +4,10 @@ literature/pdfs/open_access/*
 !literature/pdfs/open_access/.gitkeep
 literature/processed/full_text/
 
-data/
+data/*
+!data/.gitkeep
+!data/items.jsonl
+!data/manual_items.jsonl
 datasets/
 logs/
 outputs/tmp/*

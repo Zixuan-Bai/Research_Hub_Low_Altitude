@@ -1,4 +1,4 @@
-name: Literature Pipeline
+name: Weekly Research Intelligence
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       topic:
-        description: "Topic key from configs/pipeline.json, or all"
+        description: "Topic key from configs/pipeline.json, topic slug, or all"
         required: false
         default: "all"
   schedule:
@@ -18,15 +18,15 @@ permissions:
   pull-requests: write
 
 jobs:
-  run-pipeline:
+  collect-weekly:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-      - name: Run unattended literature pipeline
-        run: python scripts/run_discovery_pipeline.py --topic "${{ github.event_name == 'workflow_dispatch' && inputs.topic || 'all' }}" --write-digest
+      - name: Collect weekly research intelligence
+        run: python scripts/collect_weekly.py --topic "${{ github.event_name == 'workflow_dispatch' && inputs.topic || 'all' }}"
       - name: Check for changes
         id: changes
         shell: bash
@@ -44,13 +44,13 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          branch="automation/literature-pipeline-${{ github.run_id }}"
+          branch="automation/weekly-research-intelligence-${{ github.run_id }}"
           git checkout -b "$branch"
-          git add literature/database/*.csv outputs/weekly/*.md
-          git commit -m "Update automated literature pipeline outputs"
+          git add data/items.jsonl outputs/weekly/*.md outputs/review_dashboard.md
+          git commit -m "Update weekly research intelligence digest"
           git push -u origin "$branch"
           gh pr create \
-            --title "Update automated literature pipeline outputs" \
-            --body "Automated literature metadata search, source-quality review queue, and weekly digest update. Review outputs/weekly/ and literature/database/review_queue.csv before merging." \
+            --title "Update weekly research intelligence digest" \
+            --body "Automated weekly collection. Review outputs/weekly/ and outputs/review_dashboard.md before merging. This PR does not make final research claims." \
             --base main \
             --head "$branch"

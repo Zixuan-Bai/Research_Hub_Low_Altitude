@@ -8,11 +8,9 @@
   ],
   "limit_per_keyword": 10,
   "max_keywords_per_topic": 4,
-  "download_open_access_pdfs": false,
   "weekly_digest": true,
   "reading": {
     "provider": "kimi",
-    "max_papers_per_run": 5,
     "human_review_required": true,
     "providers": {
       "kimi": {
@@ -23,28 +21,8 @@
         "default_base_url": "https://api.moonshot.cn/v1",
         "model_env": "KIMI_READING_MODEL",
         "default_model": "kimi-k2.6"
-      },
-      "openai": {
-        "api_key_env": "OPENAI_API_KEY",
-        "model_env": "OPENAI_READING_MODEL",
-        "default_model": "gpt-5.5"
       }
     }
-  },
-  "notion": {
-    "enabled": false,
-    "mode": "review_surface",
-    "databases": [
-      "Paper Inbox",
-      "Download Queue",
-      "Reading Queue",
-      "Evidence Map Board",
-      "Route Review Board"
-    ]
-  },
-  "zotero": {
-    "enabled": false,
-    "role": "pdf_and_library_manager"
   },
   "topics": {
     "remote_id": "literature/queries/remote_id.yaml",
