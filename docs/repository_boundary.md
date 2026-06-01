@@ -6,9 +6,9 @@
 
 - `data/items.jsonl`
 - `data/manual_items.jsonl`
-- `outputs/weekly/*.md`
 - `outputs/review_dashboard.md`
 - `notes/items/*.md`
+- `topics/<topic>/research_workspace.md`
 - `topics/<topic>/synthesis.md`
 - `topics/<topic>/open_questions.md`
 - `topics/<topic>/possible_directions.md`

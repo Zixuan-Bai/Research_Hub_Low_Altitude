@@ -1,8 +1,8 @@
 """Shared utilities for the lightweight research-intelligence workflow.
 
-The new mainline uses one JSONL item store, concise Chinese notes, weekly
-digests, and on-demand topic synthesis. It deliberately avoids the older
-candidate/review/acquisition CSV state machine.
+The mainline uses one JSONL item store, concise Chinese notes, a review
+dashboard, and a topic workspace for human-led synthesis. It deliberately
+avoids the older candidate/review/acquisition CSV state machine.
 """
 
 from __future__ import annotations
@@ -31,14 +31,14 @@ PDF_TEXT_CACHE_DIR = Path(".local/pdf_text_cache")
 USER_AGENT = "low-altitude-research-hub/0.2"
 NEEDS_TOPIC_REVIEW = "needs_topic_review"
 REVIEW_STATUSES = {"new", "kept", "rejected", "downloaded"}
-PROCESS_STATUSES = {"unread", "read", "summarized", "used_in_synthesis"}
+PROCESS_STATUSES = {"unread", "noted", "used_in_synthesis"}
+LEGACY_PROCESS_STATUS_MAP = {"read": "noted", "summarized": "noted"}
 METADATA_STATUSES = {"auto", "needs_review", "verified"}
 METADATA_RANK = {"auto": 0, "needs_review": 1, "verified": 2}
 PROCESS_RANK = {
     "unread": 0,
-    "read": 1,
-    "summarized": 2,
-    "used_in_synthesis": 3,
+    "noted": 1,
+    "used_in_synthesis": 2,
 }
 SOURCE_TYPE_LABELS = {
     "paper": "论文",
@@ -50,6 +50,14 @@ SOURCE_TYPE_LABELS = {
     "news": "新闻/动态",
 }
 CONTEXT_SOURCE_TYPES = {"news", "standard", "policy", "whitepaper", "report", "industry"}
+DOCUMENT_ACCESS_OPTIONS = {
+    "direct_pdf": "可直接下载 PDF",
+    "html_fulltext": "网页正文可读",
+    "landing_page": "门户/专题入口",
+    "catalog_or_paywalled": "目录或付费入口",
+    "news_or_portal": "新闻/门户动态",
+    "needs_document_search": "需要继续找原文",
+}
 
 
 def now_iso() -> str:
@@ -448,6 +456,8 @@ def review_status(item: dict) -> str:
 
 def process_status(item: dict) -> str:
     value = item.get("process_status")
+    if value in LEGACY_PROCESS_STATUS_MAP:
+        return LEGACY_PROCESS_STATUS_MAP[value]
     if value in PROCESS_STATUSES:
         return value
     return "unread"
@@ -465,6 +475,46 @@ def sync_status_fields(item: dict) -> dict:
     item["process_status"] = process_status(item)
     item["metadata_status"] = metadata_status(item)
     item.pop("status", None)
+    return item
+
+
+def infer_document_access(item: dict) -> tuple[str, str]:
+    """Classify whether a social/context item points to a usable document."""
+    metadata = item.get("metadata") or {}
+    explicit = str(metadata.get("document_access") or "").strip()
+    if explicit in DOCUMENT_ACCESS_OPTIONS and (metadata.get("document_access_reviewed_at") or metadata.get("document_access_source") == "manual"):
+        return explicit, "manual metadata"
+
+    url = str(item.get("url") or "").strip().lower()
+    pdf_url = str(item.get("pdf_url") or "").strip().lower()
+    source_type = str(item.get("source_type") or "").strip().lower()
+    source = str(item.get("source") or "").strip().lower()
+    title = str(item.get("title") or "").strip().lower()
+    text = " ".join([url, pdf_url, source, title])
+
+    if pdf_url or url.endswith(".pdf") or ".pdf?" in url:
+        return "direct_pdf", "explicit PDF URL"
+    if any(term in text for term in ["store.", "shop.", "catalog", "dynareport", "wivsspec", "standard-specification", "astm.org"]):
+        return "catalog_or_paywalled", "catalog, standard store, or paywalled entry"
+    if source_type == "news" or any(term in text for term in ["/news/", "/press", "news", "t20"]):
+        return "news_or_portal", "news or portal-style page"
+    if any(term in text for term in ["project", "program", "overview", "traffic_management", "u-space", "utm"]):
+        return "landing_page", "topic or project landing page"
+    if source_type in {"policy", "report", "whitepaper", "industry"}:
+        return "html_fulltext", "likely readable HTML source; verify manually"
+    if source_type == "standard":
+        return "needs_document_search", "standard metadata without direct document"
+    return "needs_document_search", "no direct document signal"
+
+
+def apply_document_access_metadata(item: dict) -> dict:
+    if str(item.get("source_type") or "") not in CONTEXT_SOURCE_TYPES:
+        return item
+    metadata = item.setdefault("metadata", {})
+    access, reason = infer_document_access(item)
+    metadata["document_access"] = access
+    metadata["document_access_reason"] = reason
+    metadata.setdefault("document_access_source", "auto")
     return item
 
 
@@ -750,6 +800,7 @@ def make_item(
     authority, reason = source_authority_score(item)
     item["authority_score"] = authority
     item["metadata"]["authority_reason"] = reason
+    item = apply_document_access_metadata(item)
     return sync_status_fields(item)
 
 
@@ -828,6 +879,7 @@ def merge_item(existing: dict, incoming: dict) -> dict:
     authority, reason = source_authority_score(merged)
     merged["authority_score"] = max(int(merged.get("authority_score") or 0), authority)
     merged["metadata"].setdefault("authority_reason", reason)
+    merged = apply_document_access_metadata(merged)
     return sync_status_fields(merged)
 
 
@@ -840,6 +892,7 @@ def upsert_items(incoming_items: Iterable[dict], path: Path = ITEMS_PATH) -> tup
         authority, reason = source_authority_score(item)
         item["authority_score"] = authority
         item.setdefault("metadata", {})["authority_reason"] = reason
+        item = apply_document_access_metadata(item)
         if not item.get("id"):
             item["id"] = item_id(item.get("url", ""), item.get("title", ""), str((item.get("metadata") or {}).get("doi", "")))
         if item["id"] in by_id:
@@ -849,6 +902,7 @@ def upsert_items(incoming_items: Iterable[dict], path: Path = ITEMS_PATH) -> tup
             item.setdefault("created_at", now_iso())
             item["updated_at"] = now_iso()
             by_id[item["id"]] = item
+        by_id[item["id"]] = apply_document_access_metadata(by_id[item["id"]])
         by_id[item["id"]] = sync_pdf_filename(by_id[item["id"]])
         by_id[item["id"]] = sync_note_filename(by_id[item["id"]])
         changed_or_new.append(by_id[item["id"]])
@@ -865,6 +919,7 @@ def update_item(item: dict, path: Path = ITEMS_PATH, apply_note_backfill: bool =
     authority, reason = source_authority_score(item)
     item["authority_score"] = authority
     item.setdefault("metadata", {})["authority_reason"] = reason
+    item = apply_document_access_metadata(item)
     item = sync_human_annotation_from_pdf_name(item)
     if apply_note_backfill:
         item = backfill_metadata_from_item_note(item)
@@ -945,7 +1000,7 @@ def read_pdf_to_note(pdf_path: Path, item: dict, config: dict, timeout: int) -> 
     if not note.strip():
         raise RuntimeError("Kimi returned an empty note.")
     item = apply_note_derived_fields(item, note)
-    item["process_status"] = "summarized"
+    item["process_status"] = "noted"
     item["updated_at"] = now_iso()
     metadata = item.setdefault("metadata", {})
     metadata["pdf_fingerprint"] = sha256_file(pdf_path)
@@ -1328,71 +1383,161 @@ def item_line(item: dict) -> str:
     database = "论文数据库" if source_type == "paper" else "社会数据库" if source_type in CONTEXT_SOURCE_TYPES else "其他条目"
     score = item.get("score", "")
     authority = item.get("authority_score", "")
+    access = ""
+    if source_type in CONTEXT_SOURCE_TYPES:
+        document_access, _reason = infer_document_access(item)
+        access = f"；文档可用性：`{document_access}`"
     url = item.get("url", "")
     link = f" [{source}]({url})" if url else f" [{source}]"
     return (
         f"- **{title}**{link}；数据库：{database}；类型：{type_label} (`{source_type}`)；主主题：`{topic}`；topics：`{topics}`；相关性：{score}；权威性：{authority}；"
-        f"review_status：`{review_status(item)}`；process_status：`{process_status(item)}`；"
+        f"review_status：`{review_status(item)}`；process_status：`{process_status(item)}`{access}；"
         f"metadata_status：`{metadata_status(item)}`"
     )
 
 
-def write_weekly_digest(items: list[dict], run_items: list[dict], output_date: str | None = None) -> Path:
-    output_date = output_date or today_string()
-    path = Path("outputs/weekly") / f"{output_date}.md"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    papers = [item for item in run_items if item.get("source_type") == "paper" and item.get("score", 0) > 0]
-    context_items = [item for item in run_items if item.get("source_type") in {"news", "standard", "policy", "whitepaper", "report", "industry"} and item.get("score", 0) > 0]
-    top_items = sorted([item for item in run_items if item.get("score", 0) > 0], key=lambda row: int(row.get("score") or 0), reverse=True)[:12]
-    downloadable = [item for item in papers if item.get("pdf_url")][:10]
-    reading = sorted(papers, key=lambda row: int(row.get("score") or 0), reverse=True)[:10]
-    topics = sorted({item.get("topic", "unknown") for item in run_items if item.get("score", 0) > 0})
+def topic_items(items: list[dict], topic: str) -> list[dict]:
+    return [item for item in items if item_has_topic(item, topic)]
 
-    def section(title: str, rows: list[dict], empty: str) -> list[str]:
-        lines = [f"## {title}", ""]
-        lines.extend(item_line(item) for item in rows)
-        if not rows:
-            lines.append(empty)
-        lines.append("")
-        return lines
 
+def noted_topic_items(items: list[dict], topic: str) -> list[dict]:
+    return [
+        item
+        for item in topic_items(items, topic)
+        if process_status(item) in {"noted", "used_in_synthesis"} and item.get("note_path")
+    ]
+
+
+def topic_workspace_path(topic: str) -> Path:
+    return Path("topics") / slugify(topic) / "research_workspace.md"
+
+
+def note_excerpt(item: dict, max_chars: int = 1800) -> str:
+    path = Path(str(item.get("note_path") or ""))
+    if not path.exists():
+        return ""
+    text = path.read_text(encoding="utf-8", errors="replace")
+    text = re.sub(r"<!-- item_reading_metadata.*?-->", "", text, flags=re.DOTALL).strip()
+    return text[:max_chars].strip()
+
+
+def build_topic_workspace(topic: str, items: list[dict]) -> str:
+    topic = slugify(topic)
+    rows = topic_items(items, topic)
+    noted = noted_topic_items(items, topic)
+    context_rows = [item for item in rows if str(item.get("source_type") or "") in CONTEXT_SOURCE_TYPES]
+    open_actions = [
+        (item, action)
+        for item in rows
+        for action in (item.get("metadata") or {}).get("follow_up_actions") or []
+        if action.get("status") == "open"
+    ]
     lines = [
-        "# 每周低空研究情报摘要",
+        f"# Topic Research Workspace: {topic}",
         "",
-        f"- 生成日期：{output_date}",
-        f"- 本轮新增或更新条目：{len(run_items)}",
-        f"- 当前 item 总数：{len(items)}",
+        f"- updated_at: {now_iso()}",
+        f"- item_count: {len(rows)}",
+        f"- noted_count: {len(noted)}",
+        f"- context_signal_count: {len(context_rows)}",
         "",
-        "> 机器生成，需人工复核。本文不包含最终研究结论、创新性判断或建仓建议。",
+        "> needs-review: 本页是人机共同维护的研究讨论草稿，不是最终研究结论、novelty claim 或路线卡。",
+        "",
+        "## 证据基底",
         "",
     ]
-    lines += section("新增论文", papers[:20], "本轮没有新增通过 topic gate 的论文。")
-    lines += section(
-        "新增标准 / 政策 / 报告 / 产业信号",
-        context_items[:20],
-        "本轮尚未接入新的标准、政策、报告或产业信号源；可通过 `configs/context_sources.json` 或 `data/manual_items.jsonl` 手动补充。",
-    )
-    lines += section("优先 review 条目", top_items, "没有可 review 条目。")
-    lines += section("值得下载 PDF 的条目", downloadable, "本轮没有发现明确 open PDF URL；受限 PDF 请通过合法访问方式自行下载。")
-    lines += section("建议进入 LLM 阅读的条目", reading, "本轮没有推荐阅读条目。")
-    lines += ["## 主题层观察", ""]
-    if topics:
-        for topic in topics:
-            count = len([item for item in run_items if item.get("topic") == topic and item.get("score", 0) > 0])
-            lines.append(f"- `{topic}`：本轮收集到 {count} 个候选条目。请先人工筛选，不要直接形成研究 gap。")
+    if noted:
+        for item in sorted(noted, key=lambda row: str(row.get("date") or ""), reverse=True):
+            lines.append(item_line(item))
     else:
-        lines.append("本轮没有足够 topic 信号。")
+        lines.append("- needs-review: 该 topic 还没有已生成 note 的条目。")
+    lines += ["", "## 社会数据库线索", ""]
+    if context_rows:
+        for item in sorted(context_rows, key=lambda row: (str((row.get("metadata") or {}).get("document_access") or ""), str(row.get("title") or ""))):
+            lines.append(item_line(item))
+    else:
+        lines.append("- needs-review: 暂无标准、政策、报告、白皮书或产业线索。")
     lines += [
         "",
-        "## 建议下一步",
+        "## 当前认识",
         "",
-        "1. 打开 Streamlit review app 或 `outputs/review_dashboard.md`，先处理相关性和权威性都较高的 `new` 条目。",
-        "2. 对明确有价值的条目标记为 `kept`；对无关条目标记为 `rejected`。",
-        "3. 对需要精读的 PDF，可在 GUI 的复核条目中点击读取按钮；命令行也可运行 `python scripts/read_item.py <pdf路径>`，默认先自动推断 topic，无法确认时进入 Topic 审核。",
-        "4. topic 下已读中文笔记达到 10 篇左右后，再运行 `python scripts/synthesize_topic.py --topic <topic>`。",
+        "- paper-supported: needs-review",
+        "- inferred: needs-review",
+        "- unsupported: needs-review",
+        "",
+        "## 不确定信息",
         "",
     ]
-    path.write_text("\n".join(lines), encoding="utf-8")
+    if open_actions:
+        for item, action in open_actions[:30]:
+            lines.append(f"- needs-review: **{item.get('title', '未命名条目')}**：{action.get('text', '')}")
+    else:
+        lines.append("- needs-review: 尚未从 note 中积累明确的后续核验项。")
+    lines += [
+        "",
+        "## 可能论文 idea（问题形式）",
+        "",
+        "- proposal: needs-review",
+        "",
+        "## 推荐下一步阅读 / 检索",
+        "",
+        "- needs-review: 优先补齐直接 PDF/报告/标准原文，再讨论 gap。",
+        "",
+        "## 讨论记录",
+        "",
+        "- needs-review: 在 Streamlit Topic Workspace 中追加你和 LLM 的讨论结论；保留证据标签。",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def build_topic_workspace_prompt(topic: str, items: list[dict], workspace_text: str, max_notes: int = 8) -> str:
+    topic = slugify(topic)
+    noted = noted_topic_items(items, topic)[:max_notes]
+    evidence_blocks = []
+    for item in noted:
+        evidence_blocks.append(
+            "\n".join(
+                [
+                    f"### {item.get('title', '未命名条目')}",
+                    f"- id: {item.get('id', '')}",
+                    f"- source_type: {item.get('source_type', '')}",
+                    f"- note_path: {item.get('note_path', '')}",
+                    note_excerpt(item, max_chars=1600),
+                ]
+            )
+        )
+    evidence = "\n\n".join(evidence_blocks) or "暂无已生成 note 的材料。"
+    return f"""请作为保守的低空研究情报助手，和我讨论 topic `{topic}` 的研究工作台草稿。
+
+仓库规则：
+- 不要自动生成最终研究方向、novelty claim、route card 或实现仓库建议。
+- 所有判断必须标注 `paper-supported` / `inferred` / `proposal` / `unsupported` / `needs-review`。
+- 不足三篇相关来源对比时，不要声称 research gap。
+- 社会数据库的门户/目录页只能作为线索，不能当成已读证据。
+
+当前 workspace 草稿：
+```markdown
+{workspace_text[:8000]}
+```
+
+可用 note 摘要：
+```markdown
+{evidence}
+```
+
+请输出可以直接粘贴回 `topics/{topic}/research_workspace.md` 的修改建议，重点包括：
+1. 当前认识；
+2. 不确定信息；
+3. 可能论文 idea（必须写成问题形式）；
+4. 推荐下一步阅读 / 检索。
+"""
+
+
+def write_topic_workspace(topic: str, items: list[dict], overwrite: bool = False) -> Path:
+    path = topic_workspace_path(topic)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if overwrite or not path.exists():
+        path.write_text(build_topic_workspace(topic, items), encoding="utf-8")
     return path
 
 
@@ -1406,7 +1551,7 @@ def write_review_dashboard(items: list[dict], path: Path = Path("outputs/review_
         "## 建议操作",
         "",
         "- 人工状态 `review_status`：`new` / `kept` / `downloaded` / `rejected`，由你在 GUI 中修改。",
-        "- 流程状态 `process_status`：`unread` / `read` / `summarized` / `used_in_synthesis`，通常由脚本自动维护。",
+        "- 流程状态 `process_status`：`unread` / `noted` / `used_in_synthesis`，通常由脚本自动维护；阅读深度看 metadata 中的 `reading_status` / `reading_mode`。",
         "- 元数据状态 `metadata_status`：`auto` / `needs_review` / `verified`，GUI 保存 metadata 后会标记为 `verified`。",
         "",
     ]
@@ -1442,6 +1587,16 @@ def write_review_dashboard(items: list[dict], path: Path = Path("outputs/review_
         else:
             lines.append("暂无。")
         lines.append("")
+    context_items = [item for item in items if item.get("source_type") in CONTEXT_SOURCE_TYPES]
+    lines += ["## 社会数据库文档可用性", ""]
+    for access in DOCUMENT_ACCESS_OPTIONS:
+        rows = [item for item in context_items if infer_document_access(item)[0] == access]
+        lines += [f"### {access}", ""]
+        if rows:
+            lines.extend(item_line(item) for item in sorted(rows, key=lambda row: int(row.get("authority_score") or 0), reverse=True)[:30])
+        else:
+            lines.append("暂无。")
+        lines.append("")
     lines += ["## 按人工状态", ""]
     for status in ["new", "kept", "downloaded", "rejected"]:
         rows = sorted([item for item in items if review_status(item) == status], key=lambda row: int(row.get("score") or 0), reverse=True)
@@ -1452,7 +1607,7 @@ def write_review_dashboard(items: list[dict], path: Path = Path("outputs/review_
             lines.append("暂无。")
         lines.append("")
     lines += ["## 按流程状态", ""]
-    for status in ["unread", "read", "summarized", "used_in_synthesis"]:
+    for status in ["unread", "noted", "used_in_synthesis"]:
         rows = sorted([item for item in items if process_status(item) == status], key=lambda row: int(row.get("score") or 0), reverse=True)
         lines += [f"### {status}", ""]
         if rows:
@@ -1855,7 +2010,7 @@ def read_pdf_to_text_draft(pdf_path: Path, item: dict) -> tuple[dict, Path, str]
     text = extract_pdf_text_with_pypdf(pdf_path)
     if not text.strip():
         raise RuntimeError("Could not extract readable PDF text with pypdf/PyPDF2.")
-    item["process_status"] = "read"
+    item["process_status"] = "noted"
     item["updated_at"] = now_iso()
     metadata = item.setdefault("metadata", {})
     item = sync_human_annotation_from_pdf_name(item, pdf_path)

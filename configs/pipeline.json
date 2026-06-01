@@ -8,7 +8,6 @@
   ],
   "limit_per_keyword": 10,
   "max_keywords_per_topic": 4,
-  "weekly_digest": true,
   "reading": {
     "provider": "kimi",
     "human_review_required": true,

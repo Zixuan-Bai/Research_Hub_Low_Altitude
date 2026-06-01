@@ -4,13 +4,7 @@
 
 ## 主输出
 
-每周主要看一个文件：
-
-```text
-outputs/weekly/YYYY-MM-DD.md
-```
-
-辅助 review 面板：
+主要看 review 面板：
 
 ```text
 outputs/review_dashboard.md
@@ -31,10 +25,10 @@ review_status:
 new -> kept / downloaded / rejected
 
 process_status:
-unread -> summarized -> used_in_synthesis
+unread -> noted -> used_in_synthesis
 ```
 
-`review_status` 是人工决策层；`process_status` 是自动流程层。GUI 默认只修改 `review_status`，避免误改已经阅读或综合过的条目。
+`review_status` 是人工决策层；`process_status` 是自动流程层。只要生成了 note 就是 `noted`，阅读深度看 metadata 中的 `reading_status` / `reading_mode`。GUI 默认只修改 `review_status`，避免误改已经阅读或综合过的条目。
 
 ## 中文笔记
 
@@ -52,6 +46,14 @@ notes/items/{论文标题}.md
 - `unsupported`
 
 ## Topic synthesis
+
+日常讨论优先维护：
+
+```text
+topics/<topic>/research_workspace.md
+```
+
+这个文件用于多轮讨论当前认识、不确定信息、下一步检索和问题形式的候选 idea。
 
 只有当某个 topic 下积累了足够已读笔记时，才运行：
 

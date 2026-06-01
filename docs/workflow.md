@@ -3,14 +3,15 @@
 本仓库只保留轻量研究情报主线。
 
 ```text
-每周收集
--> 打开中文周报和本地 review app / review dashboard
--> 人工判断 keep / reject / download / read
+定期收集
+-> 打开本地 review app / review dashboard
+-> 人工判断 keep / reject / downloaded
 -> 对选中的 PDF 生成中文笔记
+-> 在 Topic Workspace 中讨论已有 note
 -> 材料足够后手动 topic synthesis
 ```
 
-## 1. 每周收集
+## 1. 情报收集
 
 ```powershell
 python scripts/collect_weekly.py --topic all
@@ -19,7 +20,6 @@ python scripts/collect_weekly.py --topic all
 主要查看：
 
 ```text
-outputs/weekly/YYYY-MM-DD.md
 outputs/review_dashboard.md
 ```
 
@@ -36,12 +36,12 @@ python -m streamlit run scripts/review_app.py
 
 界面按常用工作流排序：
 
-- 每周收集：临时补跑 `collect_weekly.py`；
+- 情报收集：临时补跑 `collect_weekly.py`；
 - 复核条目：处理 `review_status` 的 keep / reject / downloaded 三类人工状态，也可对已有本地 PDF 的条目直接生成 note；
 - Topic 审核：处理 `needs_topic_review`，输入新 topic slug 时会注册为正式 topic，并在复核条目里提示补全 query；
 - 批量读 PDF：扫描并小批量读取 `literature/inbox/papers/`；
 - Topic Overview：查看 topic 统计并按需运行 synthesis；
-- Weekly Digest：查看最新周报；
+- Topic Workspace：维护 `topics/<topic>/research_workspace.md`，用于多轮讨论当前认识、不确定信息和候选 idea；
 - 论文数据库：只查询论文，包括已经复核完成的 paper 条目；
 - 社会数据库：只查询标准、政策、报告、白皮书、新闻和产业信号。
 
@@ -49,7 +49,7 @@ python -m streamlit run scripts/review_app.py
 
 每个条目卡片中的 `编辑 metadata` 会直接修改 `data/items.jsonl`。适合补全自动脚本没有拿到的 publisher、venue、authors、DOI 等字段。保存后会重新计算 `authority`。
 
-状态分两层：`review_status` 是人工决策层，可以随时改；`process_status` 是自动流程层，通常由 Kimi 阅读和 topic synthesis 自动更新。GUI 中修改流程层需要额外确认。
+状态分两层：`review_status` 是人工决策层，可以随时改；`process_status` 是自动流程层，当前只保留 `unread` / `noted` / `used_in_synthesis`。只要生成 note 就是 `noted`，阅读深度看 metadata 里的 `reading_status` / `reading_mode`。GUI 中修改流程层需要额外确认。
 
 复核条目的 `relevance` 只是自动相关性粗分：主要来自 topic 查询文件中 `required_terms_any` 的命中数量，最高 5 分。它不代表论文质量、创新性或可实施性，只用于排序优先 review 的条目。
 
@@ -93,7 +93,7 @@ python scripts/synthesize_topic.py --topic remote_id
 当前运行逻辑：
 
 - 读取 `data/items.jsonl`；
-- 只选择 `item.topic == <topic>`、`process_status` 为 `read` / `summarized` / `used_in_synthesis`、并且已有 `note_path` 的条目；
+- 只选择 `item.topic == <topic>` 或 `topics` 包含该 topic、`process_status` 为 `noted` / `used_in_synthesis`、并且已有 `note_path` 的条目；
 - 每篇 note 最多截取前 6000 字，交给 Kimi/Moonshot 做保守综合；
 - 如果已读 note 少于 `--min-notes`，只输出 `needs-review` 占位文件。
 

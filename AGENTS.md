@@ -4,7 +4,7 @@
 
 This is a Level 0 research-intelligence repository, not an implementation repository and not a full custom knowledge-management platform.
 
-The goal is to collect low-altitude research signals, produce reviewable Chinese weekly summaries, read selected PDFs or URLs, and support human-led topic synthesis.
+The goal is to collect low-altitude research signals, review them in a local dashboard, read selected PDFs or URLs, maintain Chinese topic workspaces, and support human-led topic synthesis.
 
 Do not automatically produce final research directions, novelty claims, route cards, feasibility rankings, or implementation repository proposals.
 
@@ -25,8 +25,8 @@ These are watch topics only. Do not treat any direction as approved or novel unt
 
 Use the simplified mainline:
 
-1. Collect weekly intelligence with `scripts/collect_weekly.py`.
-2. Review `outputs/weekly/YYYY-MM-DD.md` and `outputs/review_dashboard.md`.
+1. Collect intelligence with `scripts/collect_weekly.py`.
+2. Review `outputs/review_dashboard.md` or the Streamlit review app.
 3. Read selected local PDFs with `scripts/read_item.py`.
 4. Store Chinese notes under `notes/items/`.
 5. Run `scripts/synthesize_topic.py` only when enough notes exist for a topic.
@@ -43,7 +43,8 @@ Do not reintroduce the old multi-CSV state machine unless the user explicitly as
 
 All user-facing artifacts should be written in Chinese by default:
 
-- weekly digests;
+- review dashboards;
+- topic workspaces;
 - review dashboards;
 - item notes;
 - topic synthesis;
@@ -126,7 +127,8 @@ This repository should contain:
 
 - `data/items.jsonl`;
 - lightweight manual item inputs;
-- Chinese weekly digests;
+- Chinese review dashboards;
+- Chinese topic workspaces;
 - Chinese item notes;
 - topic synthesis outputs;
 - workflow documentation;

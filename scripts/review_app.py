@@ -11,7 +11,7 @@ import research_hub_lib as hub
 
 
 REVIEW_STATUS_OPTIONS = ["new", "kept", "downloaded", "rejected"]
-PROCESS_STATUS_OPTIONS = ["unread", "read", "summarized", "used_in_synthesis"]
+PROCESS_STATUS_OPTIONS = ["unread", "noted", "used_in_synthesis"]
 SOURCE_TYPE_OPTIONS = ["paper", "news", "standard", "policy", "whitepaper", "report", "industry"]
 SOURCE_TYPE_LABELS = {
     "paper": "论文",
@@ -34,11 +34,11 @@ STATUS_LABELS = {
     "downloaded": "已下载",
     "rejected": "已拒绝",
     "unread": "未读",
-    "read": "已生成文本草稿",
-    "summarized": "已精读摘要",
+    "noted": "已生成 note",
     "used_in_synthesis": "已进入主题综合",
 }
 ACTION_LABELS = {"kept": "Keep", "rejected": "Reject", "downloaded": "Downloaded"}
+DOCUMENT_ACCESS_LABELS = hub.DOCUMENT_ACCESS_OPTIONS
 
 
 def source_type_label(source_type: str) -> str:
@@ -104,12 +104,6 @@ def read_item_from_gui(item: dict, mode: str) -> tuple[int, str]:
         ["scripts/read_item.py", str(pdf_path), "--topic", topic, "--mode", mode],
         timeout=7200,
     )
-
-
-def latest_weekly_digest() -> Path | None:
-    weekly_dir = Path("outputs/weekly")
-    files = sorted(weekly_dir.glob("*.md"), reverse=True) if weekly_dir.exists() else []
-    return files[0] if files else None
 
 
 def update_review_status(item_id: str, status: str) -> None:
@@ -221,6 +215,19 @@ def update_follow_up_action_status(item_id: str, action_id: str, status: str) ->
                 action["status"] = status
                 action["completed_at"] = hub.now_iso() if status in {"done", "skipped"} else ""
         metadata["follow_up_actions"] = actions
+        hub.update_item(item, apply_note_backfill=False)
+        hub.write_review_dashboard(hub.load_items())
+        return
+
+
+def update_document_access(item_id: str, access: str) -> None:
+    for item in hub.load_items():
+        if item.get("id") != item_id:
+            continue
+        metadata = item.setdefault("metadata", {})
+        metadata["document_access"] = access
+        metadata["document_access_reviewed_at"] = hub.now_iso()
+        metadata["document_access_source"] = "manual"
         hub.update_item(item, apply_note_backfill=False)
         hub.write_review_dashboard(hub.load_items())
         return
@@ -375,6 +382,10 @@ def render_item(st, item: dict, key_prefix: str) -> None:
             f"relevance **{item.get('score', 'unknown')}** | authority **{item.get('authority_score', 'unknown')}** | "
             f"{METADATA_STATUS_LABELS.get(hub.metadata_status(item), hub.metadata_status(item))}"
         )
+        if source_type in CONTEXT_SOURCE_TYPES:
+            access, reason = hub.infer_document_access(item)
+            st.markdown(f"文档可用性：**{DOCUMENT_ACCESS_LABELS.get(access, access)}** (`{access}`)")
+            st.caption(reason)
         if item.get("url"):
             st.markdown(f"[Source]({item['url']})")
         if item.get("pdf_url"):
@@ -435,6 +446,14 @@ def render_item(st, item: dict, key_prefix: str) -> None:
                 current_source_type = str(item.get("source_type") or "paper")
                 source_index = SOURCE_TYPE_OPTIONS.index(current_source_type) if current_source_type in SOURCE_TYPE_OPTIONS else 0
                 edited_source_type = st.selectbox("Source type", SOURCE_TYPE_OPTIONS, index=source_index, key=f"{item_key}:source-type")
+                current_access, _reason = hub.infer_document_access(item)
+                edited_document_access = st.selectbox(
+                    "Document access（社会数据库条目）",
+                    list(DOCUMENT_ACCESS_LABELS),
+                    index=list(DOCUMENT_ACCESS_LABELS).index(current_access) if current_access in DOCUMENT_ACCESS_LABELS else 0,
+                    format_func=lambda value: f"{DOCUMENT_ACCESS_LABELS.get(value, value)} ({value})",
+                    key=f"{item_key}:document-access",
+                )
                 edited_snippet = st.text_area("Abstract / snippet", value=str(item.get("abstract_or_snippet") or ""), height=140, key=f"{item_key}:snippet")
                 submitted = st.form_submit_button("保存 metadata 并标记 verified")
             if submitted:
@@ -455,6 +474,8 @@ def render_item(st, item: dict, key_prefix: str) -> None:
                         "publisher": edited_publisher,
                         "authors": edited_authors,
                         "doi": edited_doi,
+                        "document_access": edited_document_access if edited_source_type in CONTEXT_SOURCE_TYPES else "",
+                        "document_access_source": "manual" if edited_source_type in CONTEXT_SOURCE_TYPES else "",
                     },
                 )
                 st.session_state["last_action_message"] = f"metadata 已保存并标记 verified：{edited_title}"
@@ -567,9 +588,9 @@ def render_paper_database_tab(st, items: list[dict]) -> None:
 def render_context_database_tab(st, items: list[dict]) -> None:
     context_items = [item for item in items if str(item.get("source_type") or "") in CONTEXT_SOURCE_TYPES]
     categories = sorted({str(item.get("source_type") or "unknown") for item in context_items})
-    st.caption("这里显示标准、政策、报告、白皮书、新闻和产业信号。它们通常比普通论文更接近真实约束，但仍需要人工复核来源、时效和适用范围。")
+    st.caption("这里显示标准、政策、报告、白皮书、新闻和产业信号。先按文档可用性分层：直接 PDF 和网页正文优先读，门户/目录页只作为线索。")
 
-    columns = st.columns([1.0, 1.2, 1.0, 2.0])
+    columns = st.columns([1.0, 1.2, 1.1, 1.0, 2.0])
     selected_type = columns[0].selectbox(
         "类型",
         ["all", *categories],
@@ -577,21 +598,41 @@ def render_context_database_tab(st, items: list[dict]) -> None:
         key="context-db-type",
     )
     selected_topic = columns[1].selectbox("Topic", ["all", *sorted({topic for item in context_items for topic in hub.item_topics(item)})], key="context-db-topic")
-    selected_review = columns[2].selectbox("Review", ["all", *REVIEW_STATUS_OPTIONS], key="context-db-review")
-    query = columns[3].text_input("Search", key="context-db-search")
+    selected_access = columns[2].selectbox(
+        "文档可用性",
+        ["all", *DOCUMENT_ACCESS_LABELS.keys()],
+        format_func=lambda value: "all" if value == "all" else f"{DOCUMENT_ACCESS_LABELS.get(value, value)} ({value})",
+        key="context-db-access",
+    )
+    selected_review = columns[3].selectbox("Review", ["all", *REVIEW_STATUS_OPTIONS], key="context-db-review")
+    query = columns[4].text_input("Search", key="context-db-search")
 
     type_rows = [
         {"类型": source_type_label(source_type), "source_type": source_type, "数量": sum(1 for item in context_items if item.get("source_type") == source_type)}
         for source_type in categories
     ]
+    access_rows = [
+        {
+            "文档可用性": DOCUMENT_ACCESS_LABELS.get(access, access),
+            "document_access": access,
+            "数量": sum(1 for item in context_items if hub.infer_document_access(item)[0] == access),
+        }
+        for access in DOCUMENT_ACCESS_LABELS
+    ]
+    summary_columns = st.columns(2)
     if type_rows:
-        st.dataframe(type_rows, hide_index=True, width="stretch")
+        summary_columns[0].dataframe(type_rows, hide_index=True, width="stretch")
+    if access_rows:
+        summary_columns[1].dataframe(access_rows, hide_index=True, width="stretch")
 
     rows = []
     for item in context_items:
+        access, _reason = hub.infer_document_access(item)
         if selected_type != "all" and item.get("source_type") != selected_type:
             continue
         if selected_topic != "all" and not hub.item_has_topic(item, selected_topic):
+            continue
+        if selected_access != "all" and access != selected_access:
             continue
         if selected_review != "all" and hub.review_status(item) != selected_review:
             continue
@@ -610,19 +651,10 @@ def render_context_database_tab(st, items: list[dict]) -> None:
                 continue
         rows.append(item)
 
-    rows = sorted(rows, key=lambda row: (str(row.get("source_type") or ""), str(row.get("topic") or ""), str(row.get("title") or "")))
+    rows = sorted(rows, key=lambda row: (hub.infer_document_access(row)[0], str(row.get("source_type") or ""), str(row.get("topic") or ""), str(row.get("title") or "")))
     st.write(f"{len(rows)} / {len(context_items)} signals")
     for item in rows:
         render_item(st, item, key_prefix="context-db")
-
-
-def render_weekly_digest_tab(st) -> None:
-    digest = latest_weekly_digest()
-    if not digest:
-        st.info("尚未生成 weekly digest。")
-        return
-    st.caption(digest.as_posix())
-    st.markdown(digest.read_text(encoding="utf-8", errors="replace"))
 
 
 def topic_counts(items: list[dict]) -> dict[str, Counter]:
@@ -632,8 +664,8 @@ def topic_counts(items: list[dict]) -> dict[str, Counter]:
         for topic in topics:
             counts[topic][hub.review_status(item)] += 1
             counts[topic][hub.process_status(item)] += 1
-            if hub.process_status(item) in {"read", "summarized", "used_in_synthesis"}:
-                counts[topic]["read_or_summarized"] += 1
+            if hub.process_status(item) in {"noted", "used_in_synthesis"}:
+                counts[topic]["noted_or_used"] += 1
     return counts
 
 
@@ -650,8 +682,8 @@ def render_topic_overview_tab(st, items: list[dict]) -> None:
         "new",
         "kept",
         "downloaded",
-        "read_or_summarized",
-        "summarized",
+        "noted_or_used",
+        "noted",
         "used_in_synthesis",
         "min_notes",
         "ready_for_synthesis",
@@ -661,7 +693,7 @@ def render_topic_overview_tab(st, items: list[dict]) -> None:
     for topic in sorted(counts):
         row = {header: topic if header == "topic" else counts[topic][header] for header in headers}
         row["min_notes"] = min_notes
-        row["ready_for_synthesis"] = counts[topic]["read_or_summarized"] >= min_notes
+        row["ready_for_synthesis"] = counts[topic]["noted_or_used"] >= min_notes
         row["synthesis_exists"] = topic_synthesis_exists(topic)
         rows.append(row)
     st.dataframe(rows, hide_index=True, width="stretch")
@@ -684,8 +716,74 @@ def render_topic_overview_tab(st, items: list[dict]) -> None:
             st.error(f"失败，退出码 {code}")
 
 
+def render_topic_workspace_tab(st, items: list[dict]) -> None:
+    topics = sorted({topic for item in items for topic in hub.item_topics(item)})
+    if not topics:
+        st.info("暂无 topic 数据。")
+        return
+    selected_topic = st.selectbox("Topic", topics, key="workspace-topic")
+    topic_items = hub.topic_items(items, selected_topic)
+    noted_items = hub.noted_topic_items(items, selected_topic)
+    context_items = [item for item in topic_items if str(item.get("source_type") or "") in CONTEXT_SOURCE_TYPES]
+    st.caption(
+        f"`{selected_topic}`：{len(topic_items)} 个条目，{len(noted_items)} 个已有 note，{len(context_items)} 个社会数据库线索。"
+    )
+
+    path = hub.topic_workspace_path(selected_topic)
+    columns = st.columns([1.0, 1.0, 3.0])
+    overwrite = columns[0].checkbox("覆盖已有草稿", value=False, key="workspace-overwrite")
+    if columns[1].button("生成 / 刷新 workspace", key="workspace-generate"):
+        path = hub.write_topic_workspace(selected_topic, items, overwrite=overwrite)
+        st.session_state["last_action_message"] = f"Topic Workspace 已写入：{path.as_posix()}"
+        rerun(st)
+    columns[2].code(path.as_posix(), language="text")
+
+    if not path.exists():
+        st.info("还没有 workspace 文件。点击“生成 / 刷新 workspace”创建初始草稿。")
+        workspace_text = hub.build_topic_workspace(selected_topic, items)
+    else:
+        workspace_text = path.read_text(encoding="utf-8", errors="replace")
+
+    rows = [
+        {
+            "title": item.get("title", ""),
+            "source_type": item.get("source_type", ""),
+            "review": hub.review_status(item),
+            "process": hub.process_status(item),
+            "note": item.get("note_path", ""),
+            "document_access": hub.infer_document_access(item)[0] if str(item.get("source_type") or "") in CONTEXT_SOURCE_TYPES else "",
+        }
+        for item in topic_items
+    ]
+    if rows:
+        st.dataframe(rows, hide_index=True, width="stretch")
+
+    edited_workspace = st.text_area("research_workspace.md", value=workspace_text, height=520, key=f"workspace-editor:{selected_topic}")
+    save_columns = st.columns([1.0, 3.0])
+    if save_columns[0].button("保存 workspace", key="workspace-save"):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(edited_workspace, encoding="utf-8")
+        st.session_state["last_action_message"] = f"已保存：{path.as_posix()}"
+        rerun(st)
+    save_columns[1].caption("这个文件是讨论草稿。请保留 paper-supported / inferred / proposal / unsupported / needs-review 标签。")
+
+    with st.expander("生成给 LLM 的讨论提示词", expanded=False):
+        prompt = hub.build_topic_workspace_prompt(selected_topic, items, edited_workspace)
+        st.text_area("复制给 Codex / Kimi / ChatGPT 的提示词", value=prompt, height=360, key=f"workspace-prompt:{selected_topic}")
+
+    with st.expander("追加讨论记录", expanded=False):
+        discussion = st.text_area("本轮讨论结论或待办", height=160, key=f"workspace-discussion:{selected_topic}")
+        if st.button("追加到讨论记录", key="workspace-append-discussion", disabled=not discussion.strip()):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            current = edited_workspace.rstrip()
+            addition = f"\n\n### {hub.now_iso()}\n\n{discussion.strip()}\n"
+            path.write_text(current + addition, encoding="utf-8")
+            st.session_state["last_action_message"] = f"已追加讨论记录：{path.as_posix()}"
+            rerun(st)
+
+
 def render_collect_tab(st) -> None:
-    st.subheader("每周情报收集")
+    st.subheader("情报收集")
     collect_topic = st.selectbox("收集 topic", ["all", *sorted(hub.topic_key_to_slug(hub.load_config()).keys())])
     dry_run = st.checkbox("只预览，不写文件", value=False)
     if st.button("运行收集"):
@@ -795,11 +893,8 @@ def main() -> None:
             ),
             "query": st.text_input("Search"),
         }
-        digest = latest_weekly_digest()
-        if digest:
-            st.markdown(f"Latest weekly digest: `{digest.as_posix()}`")
 
-    tabs = st.tabs(["每周收集", "复核条目", "Topic 审核", "批量读 PDF", "Topic Overview", "Weekly Digest", "论文数据库", "社会数据库"])
+    tabs = st.tabs(["情报收集", "复核条目", "Topic 审核", "批量读 PDF", "Topic Overview", "Topic Workspace", "论文数据库", "社会数据库"])
     with tabs[0]:
         render_collect_tab(st)
     with tabs[1]:
@@ -811,7 +906,7 @@ def main() -> None:
     with tabs[4]:
         render_topic_overview_tab(st, items)
     with tabs[5]:
-        render_weekly_digest_tab(st)
+        render_topic_workspace_tab(st, items)
     with tabs[6]:
         render_paper_database_tab(st, items)
     with tabs[7]:

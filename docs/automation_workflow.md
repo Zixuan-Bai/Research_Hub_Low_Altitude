@@ -1,12 +1,12 @@
 # 自动化工作流
 
-GitHub Actions 只负责每周收集和生成中文周报，不做最终研究判断。
+GitHub Actions 只负责定期收集和更新 review dashboard，不做最终研究判断。
 
 当前定时任务在 `.github/workflows/literature_pipeline.yml` 中配置为每周一 UTC 02:00 运行。换算到北京时间是每周一 10:00。
 
 ## 手动运行
 
-在 GitHub Actions 中运行 `Weekly Research Intelligence`，可选择：
+在 GitHub Actions 中运行 `Research Intelligence Collection`，可选择：
 
 ```text
 topic = all
@@ -24,7 +24,6 @@ python scripts/collect_weekly.py --topic all
 
 ```text
 data/items.jsonl
-outputs/weekly/YYYY-MM-DD.md
 outputs/review_dashboard.md
 ```
 
@@ -41,7 +40,7 @@ python -m streamlit run scripts/review_app.py
 
 状态仍写回 `data/items.jsonl`，不是写到外部系统。
 
-这个界面也可以临时补跑每周收集；但长期建议让 GitHub Actions 定时生成 PR，你只 review PR 中的周报和 dashboard。
+这个界面也可以临时补跑收集；但长期建议让 GitHub Actions 定时生成 PR，你只 review PR 中的 `data/items.jsonl` 和 dashboard。
 
 ## 本地 PDF 阅读
 

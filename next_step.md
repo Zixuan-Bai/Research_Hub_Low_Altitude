@@ -16,14 +16,14 @@ The recent refactor is directionally correct. Please do not add major architectu
 
 3. Update README.
    - Explain the actual process lifecycle:
-     `unread -> read(text-draft) -> summarized(Kimi/LLM) -> used_in_synthesis`.
-   - Explain `metadata-only`, `text-draft`, and `kimi` modes.
+     `unread -> noted -> used_in_synthesis`.
+   - Explain that `metadata-only` does not generate a note, while `text-draft` and `kimi` both generate notes and differ through `reading_status` / `reading_mode` metadata.
 
 4. Improve Streamlit GUI.
    - Add a filter for `metadata_status`: all / auto / needs_review / verified.
    - Add a dashboard section for items whose metadata needs review.
    - In Topic Overview, show:
-     - read_or_summarized count;
+     - noted_or_used count;
      - min_notes threshold;
      - ready_for_synthesis;
      - whether synthesis outputs already exist.

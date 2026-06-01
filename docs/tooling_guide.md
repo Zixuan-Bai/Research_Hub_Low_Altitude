@@ -2,7 +2,7 @@
 
 ## 常用命令
 
-每周收集：
+情报收集：
 
 ```powershell
 python scripts/collect_weekly.py --topic all
@@ -22,6 +22,8 @@ python scripts/read_item.py "literature/inbox/papers/example.pdf"
 pip install -r requirements.txt
 python -m streamlit run scripts/review_app.py
 ```
+
+Windows 可双击仓库根目录的 `启动研究面板.bat`。
 
 批量读取 PDF：
 
@@ -58,15 +60,15 @@ KIMI_READING_MODEL=kimi-k2.6
 优先看：
 
 ```text
-outputs/weekly/YYYY-MM-DD.md
 outputs/review_dashboard.md
+topics/<topic>/research_workspace.md
 ```
 
 有 Streamlit 时优先用 `scripts/review_app.py` 标记状态；没有 Streamlit 时先看 Markdown dashboard。不要把机器摘要当最终结论。需要人工复核后再进入 topic synthesis。
 
 GUI 的 `编辑 metadata` 会直接写回 `data/items.jsonl`。补全 publisher 或 venue 后，`authority` 会自动重算。
 
-GUI 的普通按钮只修改 `review_status`，不会覆盖 `process_status`。如果需要手动修正流程状态，需要在条目卡片的危险操作区确认。
+GUI 的普通按钮只修改 `review_status`，不会覆盖 `process_status`。如果需要手动修正流程状态，需要在条目卡片的危险操作区确认。`process_status` 只保留 `unread` / `noted` / `used_in_synthesis`，阅读深度看 metadata。
 
 `relevance` 是自动相关性粗分，不是质量分。它主要根据 topic gate 命中的关键词数量排序，帮助你先看更可能相关的条目。
 

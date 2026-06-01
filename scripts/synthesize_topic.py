@@ -111,7 +111,7 @@ def main() -> int:
     items = hub.load_items()
     read_items = [
         item for item in items
-        if hub.item_has_topic(item, topic) and hub.process_status(item) in {"read", "summarized", "used_in_synthesis"} and item.get("note_path")
+        if hub.item_has_topic(item, topic) and hub.process_status(item) in {"noted", "used_in_synthesis"} and item.get("note_path")
     ]
 
     if args.dry_run:

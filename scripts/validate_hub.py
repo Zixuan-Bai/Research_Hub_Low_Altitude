@@ -12,7 +12,6 @@ REQUIRED_DIRS = [
     "literature/inbox/papers",
     "literature/queries",
     "notes/items",
-    "outputs/weekly",
     "scripts",
     "topics",
 ]
@@ -50,11 +49,10 @@ ALLOWED_EMPTY_FILES = {
     "data/manual_items.jsonl",
     "literature/inbox/papers/.gitkeep",
     "notes/items/.gitkeep",
-    "outputs/weekly/.gitkeep",
 }
 
 REVIEW_STATUSES = {"new", "kept", "rejected", "downloaded"}
-PROCESS_STATUSES = {"unread", "read", "summarized", "used_in_synthesis"}
+PROCESS_STATUSES = {"unread", "noted", "used_in_synthesis"}
 METADATA_STATUSES = {"auto", "needs_review", "verified"}
 
 

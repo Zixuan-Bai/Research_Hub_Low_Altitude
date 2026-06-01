@@ -34,7 +34,7 @@ jobs:
         run: python scripts/validate_hub.py
       - name: Compile scripts
         run: python -m py_compile scripts/research_hub_lib.py scripts/batch_read_pdfs.py scripts/collect_weekly.py scripts/read_item.py scripts/review_app.py scripts/synthesize_topic.py scripts/validate_hub.py
-      - name: Dry-run weekly collection
+      - name: Dry-run collection
         run: python scripts/collect_weekly.py --topic remote_id --dry-run
       - name: Dry-run topic synthesis
         run: python scripts/synthesize_topic.py --topic remote_id --dry-run
