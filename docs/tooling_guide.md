@@ -11,8 +11,10 @@ python scripts/collect_weekly.py --topic all
 读取单个 PDF：
 
 ```powershell
-python scripts/read_item.py "literature/inbox/papers/example.pdf" --topic remote_id
+python scripts/read_item.py "literature/inbox/papers/example.pdf"
 ```
+
+默认 `--topic auto`；无法可靠归类时进入 GUI 的 Topic 审核。
 
 本地复核界面：
 

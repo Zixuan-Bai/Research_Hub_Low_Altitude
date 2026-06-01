@@ -61,6 +61,8 @@ def build_llm_prompt(topic: str, read_items: list[dict]) -> str:
             {
                 "id": item.get("id", ""),
                 "title": item.get("title", ""),
+                "primary_topic": item.get("topic", ""),
+                "topics": hub.item_topics(item),
                 "note_path": item.get("note_path", ""),
                 "note_preview": extract_note_preview(path),
             }
@@ -109,7 +111,7 @@ def main() -> int:
     items = hub.load_items()
     read_items = [
         item for item in items
-        if item.get("topic") == topic and hub.process_status(item) in {"read", "summarized", "used_in_synthesis"} and item.get("note_path")
+        if hub.item_has_topic(item, topic) and hub.process_status(item) in {"read", "summarized", "used_in_synthesis"} and item.get("note_path")
     ]
 
     if args.dry_run:

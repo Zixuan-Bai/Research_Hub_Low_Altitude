@@ -52,21 +52,27 @@ outputs/review_dashboard.md
 
 如果本地暂时没有安装 Streamlit，也可以先打开 `outputs/review_dashboard.md` 做人工浏览。
 
-GUI 里也可以直接运行每周收集、扫描本地 PDF、批量读取 PDF、处理 `needs_topic_review` 条目。每周收集在 GitHub Actions 中也有定时任务；本地按钮主要用于临时补跑。
+GUI 里也可以直接运行每周收集、扫描本地 PDF、批量读取 PDF、处理 `needs_topic_review` 条目。每周收集在 GitHub Actions 中也有定时任务；本地按钮主要用于临时补跑。`复核条目` 会把论文、标准、政策、报告和产业信号放在一起处理，但每张卡片都会明确显示所属数据库和具体类型。`论文数据库` 只查询 paper；`社会数据库` 只查询 standard / policy / report / whitepaper / industry / news。推荐顺序是：每周收集 -> 复核条目 -> Topic 审核 -> 批量读 PDF -> Topic Overview -> Weekly Digest -> 论文数据库 / 社会数据库。
 
-每个条目卡片里的 `编辑 metadata` 可以直接修改数据库字段，包括 title、year、venue、publisher、authors、DOI、URL、source type 和 abstract/snippet。保存后会重算 `authority`；如果该条目已有 note 且标题被修改，note 文件名也会随标题同步更新。
+每个条目卡片里的 `编辑 metadata` 可以直接修改数据库字段，包括 title、year、venue、publisher、authors、DOI、URL、source type 和 abstract/snippet。保存后会重算 `authority`；如果该条目已有 note 或本地 PDF，文件名会按当前 metadata 同步更新。
 
 ### 3. 读取单个 PDF
 
 ```powershell
-python scripts/read_item.py "literature/inbox/papers/example.pdf" --topic remote_id
+python scripts/read_item.py "literature/inbox/papers/example.pdf"
 ```
+
+默认 `--topic auto`。脚本会先尝试根据 PDF 标题和短文本匹配已有 topic；匹配不可靠时保留为 `needs_topic_review`，你可以先生成 note，再在 GUI 的 Topic 审核里根据 note 划分 topic。已经确定 topic 时仍可显式指定，例如 `--topic remote_id`。
 
 输出：
 
 ```text
-notes/items/{论文标题}.md
+notes/items/【人工中文注释】-年份-来源-题目-标识id.md
 ```
+
+`【人工中文注释】` 是可选前缀；当前可在 item metadata 中使用 `human_annotation_zh`、`title_annotation_zh`、`annotation_zh` 或 `note_annotation_zh`。脚本会使用 metadata 中的 year、venue/publisher/source、title 和 item id 生成文件名。本地 PDF 也会在读取后改成同一 stem，只保留 `.pdf` 后缀。若你后来手动改了 PDF 文件名，再次运行 `read_item.py` 或批量扫描时会用 PDF 指纹找到已有条目，并把 PDF 与 note 名称重新同步到规范格式。
+
+如果 PDF 文件名以 `【中文注释】` 开头，脚本会把该注释写入 item metadata，并在后续命名中保留。Kimi/LLM note 的 `元数据` 段会被保守回填到 `data/items.jsonl`；这些字段会标记 `llm_metadata_needs_review=true`，需要人工复核后再在 GUI 中保存为 `verified`。
 
 阅读笔记默认用中文。少量机器标签保留英文，例如：
 
@@ -74,7 +80,10 @@ notes/items/{论文标题}.md
 - `inferred`
 - `proposal`
 - `unsupported`
+- `metadata only`
+- `abstract only`
 - `full-text parsed`
+- `needs-review`
 
 这些标签用于保持证据边界清晰。
 
@@ -90,9 +99,9 @@ python scripts/batch_read_pdfs.py --pdf-dir literature/inbox/papers --topic auto
 python scripts/batch_read_pdfs.py --pdf-dir literature/inbox/papers --topic auto --max-items 3
 ```
 
-批量读取会跳过已经生成过 note 的 PDF。无法可靠归入现有 topic 的条目会进入 `needs_topic_review`，需要在 GUI 中审批到已有 topic 或新候选 topic。
+批量读取会跳过已经生成过 note 的 PDF，并在跳过时同步 PDF/note 文件名。无法可靠归入现有 topic 的条目会进入 `needs_topic_review`，需要在 GUI 中审批到已有 topic 或新候选 topic。
 
-note 文件名默认使用数据库中的论文标题。若标题包含 Windows 不允许的文件名字符，脚本会自动替换；若重名，则追加 item id 防止覆盖。
+若标题、来源或年份包含 Windows 不允许的文件名字符，脚本会自动替换；item id 是规范文件名的一部分，用于避免重名覆盖。
 
 ### 4. 按需 topic synthesis
 
@@ -121,19 +130,34 @@ review_status:
 new -> kept / downloaded / rejected
 
 process_status:
-unread -> summarized -> used_in_synthesis
+unread -> read -> summarized -> used_in_synthesis
 ```
 
 其中：
 
 ```text
 review_status：由你在 GUI 中点击决定，可以随时反复修改
-process_status：由自动流程维护；Kimi 读完 PDF 后标记 summarized，topic synthesis 使用后标记 used_in_synthesis
+process_status：由自动流程维护；text-draft 模式读完 PDF 后标记 read，Kimi 读完 PDF 后标记 summarized，topic synthesis 使用后标记 used_in_synthesis
 ```
+
+阅读模式和状态语义：
+
+- `metadata-only`：只登记 metadata 和 PDF 指纹，`reading_status=metadata_only`，不生成 note。
+- `text-draft`：用 pypdf 抽取文本并生成待复核草稿，`reading_status=text_extracted`，`summary_status=text-draft`，`visual_status=not_parsed`。长文本只写入 `.local/pdf_text_cache/`，不会进入提交区 note。
+- `kimi`：上传 PDF 给 Kimi/Moonshot 生成结构化中文笔记，`reading_status=model_parsed_pdf`，`summary_status=summarized`。
+
+成本控制建议：
+
+- 先跑 `metadata-only` 或 `text-draft`，只对确实值得精读的 PDF 使用 `kimi`。
+- Kimi 模式会把 PDF 提取内容作为上下文提交，长综述、长参考文献、扫描件 OCR 噪声都会显著增加 token；当前详细笔记要求也会增加输出 token。
+- 对低相关或只是背景材料的文献，优先保留 `text-draft` 或只做 metadata，不必全部精读。
+- 每次批量读取前使用 `--dry-run`，并用 `--max-items` 控制批量规模。
 
 GUI 默认只暴露 `review_status` 的三个按钮，避免误把已经读过或综合过的条目改回普通状态。如果确实要人工修改 `process_status`，需要展开条目中的“危险操作：手动修改流程状态”，勾选确认后才能覆盖。
 
 状态记录在 `data/items.jsonl` 中。本地 Streamlit 面板用于日常标记；`outputs/review_dashboard.md` 用作无需安装依赖时的轻量 review 面板。
+
+每篇 note 的 `后续建议` 会进入 item metadata 的 `follow_up_actions` 列表。每条建议有 `open` / `done` / `skipped` 状态；GUI 条目卡片里可以逐条标记，默认收起，`outputs/review_dashboard.md` 会集中列出 `后续建议待处理`。
 
 GUI 按钮含义：
 
@@ -168,7 +192,19 @@ GUI 按钮含义：
 literature/inbox/papers/
 ```
 
-该目录默认不提交 PDF。
+下载到本地的社会数据库原文按类型临时放在：
+
+```text
+literature/inbox/social/standards/
+literature/inbox/social/policies/
+literature/inbox/social/reports/
+literature/inbox/social/industry/
+literature/inbox/social/news/
+```
+
+这些 inbox 目录默认不提交原文文件，只保留 `.gitkeep`。标准、政策、报告、产业信号和新闻的长期记录仍以 `data/items.jsonl` metadata、URL、中文 note 和 synthesis 输出为主，避免把受版权或时效限制的全文材料放进仓库。
+
+topic 字段现在按兼容方式处理：`topic` 是主标签，`topics` 是多标签列表。GUI 中每个条目卡片都会直接显示 topic 编辑区，可以修改主 topic，也可以用逗号、空格或换行添加/删除多个 topic。topic synthesis 会按 `item.topic == X or X in item.topics` 选取 note，因此一篇论文、一份标准或一条社会信号可以被多个方向共同引用。
 
 ## 配置
 

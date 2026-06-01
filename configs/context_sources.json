@@ -3,12 +3,84 @@
   "urls": [
     {
       "title": "FAA Remote Identification of Drones",
-      "url": "https://www.faa.gov/uas/getting_started/remote_id",
+      "url": "https://www.faa.gov/uas/getting_started/remote_id/",
       "source": "FAA",
       "source_type": "policy",
       "topic": "remote_id_broadcast_capacity",
-      "snippet": "Remote ID policy and compliance background for unmanned aircraft systems.",
-      "score": 2
+      "snippet": "美国 Remote ID 规则、合规要求和监管背景入口。",
+      "score": 4
+    },
+    {
+      "title": "ASTM F3411 Standard Specification for Remote ID and Tracking",
+      "url": "https://store.astm.org/f3411-19.html",
+      "source": "ASTM International",
+      "source_type": "standard",
+      "topic": "remote_id_broadcast_capacity",
+      "snippet": "Remote ID and Tracking 标准入口；只保存元数据和链接，不保存标准全文。",
+      "score": 4
+    },
+    {
+      "title": "FAA Unmanned Aircraft System Traffic Management",
+      "url": "https://www.faa.gov/uas/advanced_operations/traffic_management",
+      "source": "FAA",
+      "source_type": "policy",
+      "topic": "remote_id_broadcast_capacity",
+      "snippet": "美国 UTM 监管和运行概念入口，可用于补充低空管理背景。",
+      "score": 4
+    },
+    {
+      "title": "NASA UAS Traffic Management Project",
+      "url": "https://www.nasa.gov/utm",
+      "source": "NASA",
+      "source_type": "report",
+      "topic": "remote_id_broadcast_capacity",
+      "snippet": "NASA UTM 项目背景，关注低空无人机安全接入和交通管理。",
+      "score": 4
+    },
+    {
+      "title": "EASA U-space",
+      "url": "https://www.easa.europa.eu/en/domains/air-traffic-management/u-space",
+      "source": "EASA",
+      "source_type": "policy",
+      "topic": "remote_id_broadcast_capacity",
+      "snippet": "欧洲 U-space 空域服务和 UAS 运行管理背景入口。",
+      "score": 4
+    },
+    {
+      "title": "CAAC Minimum Performance Requirements for Operation Identification of Civil Micro, Light and Small UAVs",
+      "url": "https://www.caac.gov.cn/English/News/202403/t20240305_223119.html",
+      "source": "CAAC",
+      "source_type": "policy",
+      "topic": "remote_id_broadcast_capacity",
+      "snippet": "中国民用微型、轻型、小型无人驾驶航空器运行识别最低性能要求的官方英文新闻入口。",
+      "score": 4
+    },
+    {
+      "title": "CAAC General Aviation and Low-Altitude Economy Steering Group",
+      "url": "https://www.caac.gov.cn/English/News/202507/t20250709_227896.html",
+      "source": "CAAC",
+      "source_type": "policy",
+      "topic": "dtmb_uav_control",
+      "snippet": "中国通航和低空经济监管组织与后续工作方向的官方英文新闻入口。",
+      "score": 3
+    },
+    {
+      "title": "3GPP NR Support for UAVs",
+      "url": "https://www.3gpp.org/technologies/nr-uav",
+      "source": "3GPP",
+      "source_type": "standard",
+      "topic": "dynamic_directional_networking",
+      "snippet": "3GPP 对 UAV/UAS 蜂窝通信、识别、连接和跟踪相关工作的概览入口。",
+      "score": 4
+    },
+    {
+      "title": "3GPP UAS Connectivity, Identification and Tracking Work Item",
+      "url": "https://www.3gpp.org/DynaReport/WiVsSpec--820011.htm",
+      "source": "3GPP",
+      "source_type": "standard",
+      "topic": "dynamic_directional_networking",
+      "snippet": "3GPP UAS connectivity, identification and tracking 相关规范列表入口。",
+      "score": 4
     }
   ]
 }

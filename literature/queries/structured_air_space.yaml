@@ -1,0 +1,25 @@
+topic: structured_air_space
+status: needs_keywords
+description: Candidate topic created from GUI review. Seed title:
+
+seed_keywords:
+  - structured air space
+
+required_terms_any:
+  - UAV
+  - UAS
+  - drone
+  - low altitude
+
+exclude_terms_any:
+  - unrelated
+
+must_extract:
+  - problem setting
+  - method
+  - assumptions
+  - evidence
+  - limitations
+
+exclude:
+  - papers unrelated to low-altitude communication or autonomous aerial systems

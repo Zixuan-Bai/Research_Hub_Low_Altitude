@@ -34,12 +34,18 @@ python -m streamlit run scripts/review_app.py
 
 该界面直接更新 `data/items.jsonl`，并重新生成 `outputs/review_dashboard.md`。如果暂时不用 Streamlit，就打开 `outputs/review_dashboard.md` 浏览条目，再少量手动调整状态。
 
-界面包含四个常用区：
+界面按常用工作流排序：
 
-- 复核条目：处理 `review_status` 的 keep / reject / downloaded 三类人工状态；
 - 每周收集：临时补跑 `collect_weekly.py`；
+- 复核条目：处理 `review_status` 的 keep / reject / downloaded 三类人工状态，也可对已有本地 PDF 的条目直接生成 note；
+- Topic 审核：处理 `needs_topic_review`，输入新 topic slug 时会注册为正式 topic，并在复核条目里提示补全 query；
 - 批量读 PDF：扫描并小批量读取 `literature/inbox/papers/`；
-- Topic 审批：处理 `needs_topic_review`，不自动新增方向。
+- Topic Overview：查看 topic 统计并按需运行 synthesis；
+- Weekly Digest：查看最新周报；
+- 论文数据库：只查询论文，包括已经复核完成的 paper 条目；
+- 社会数据库：只查询标准、政策、报告、白皮书、新闻和产业信号。
+
+复核条目仍然混合显示，方便统一做 keep / reject / downloaded 判断；但每张卡片会明显标出它属于“论文数据库”还是“社会数据库”，并显示具体 source_type。标准、政策、报告和产业信号通常更接近真实约束，但仍要复核来源、时效和适用范围，不能直接当成研究结论。
 
 每个条目卡片中的 `编辑 metadata` 会直接修改 `data/items.jsonl`。适合补全自动脚本没有拿到的 publisher、venue、authors、DOI 等字段。保存后会重新计算 `authority`。
 
@@ -52,8 +58,10 @@ python -m streamlit run scripts/review_app.py
 ## 3. 单篇阅读
 
 ```powershell
-python scripts/read_item.py "literature/inbox/papers/example.pdf" --topic remote_id
+python scripts/read_item.py "literature/inbox/papers/example.pdf"
 ```
+
+默认会自动推断 topic。你也可以先在复核条目里点击读取按钮生成 note，再到 Topic 审核里根据 note 划分 topic；只有已经确定 topic 时才需要显式加 `--topic <topic>`。
 
 输出：
 
@@ -82,7 +90,36 @@ python scripts/synthesize_topic.py --topic remote_id
 
 如果已读材料不足，脚本只写 `needs-review` 提示，不生成研究 gap 或路线卡。
 
-## 5. 不再默认做的事
+当前运行逻辑：
+
+- 读取 `data/items.jsonl`；
+- 只选择 `item.topic == <topic>`、`process_status` 为 `read` / `summarized` / `used_in_synthesis`、并且已有 `note_path` 的条目；
+- 每篇 note 最多截取前 6000 字，交给 Kimi/Moonshot 做保守综合；
+- 如果已读 note 少于 `--min-notes`，只输出 `needs-review` 占位文件。
+
+`topic` 是主标签，`topics` 是多标签列表。复核条目和两个数据库视图中的每个条目卡片都会直接给出 topic 编辑区，可以修改主 topic，也可以用逗号、空格或换行添加/删除多个 topic。topic synthesis 按 `item.topic == x or x in item.topics` 选择 notes，因此论文、标准、政策和产业材料都可以被多个方向共同引用。
+
+## 5. 本地原文放置
+
+论文 PDF 放在：
+
+```text
+literature/inbox/papers/
+```
+
+社会数据库原文按类型放在：
+
+```text
+literature/inbox/social/standards/
+literature/inbox/social/policies/
+literature/inbox/social/reports/
+literature/inbox/social/industry/
+literature/inbox/social/news/
+```
+
+这些目录默认不提交原文文件。仓库只保留 metadata、URL、中文 note 和综合输出。
+
+## 6. 不再默认做的事
 
 - 不自动生成 route card；
 - 不自动排名 feasibility；

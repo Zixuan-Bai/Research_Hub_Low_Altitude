@@ -1,5 +1,15 @@
 literature/inbox/papers/*
 !literature/inbox/papers/.gitkeep
+literature/inbox/social/standards/*
+!literature/inbox/social/standards/.gitkeep
+literature/inbox/social/policies/*
+!literature/inbox/social/policies/.gitkeep
+literature/inbox/social/reports/*
+!literature/inbox/social/reports/.gitkeep
+literature/inbox/social/industry/*
+!literature/inbox/social/industry/.gitkeep
+literature/inbox/social/news/*
+!literature/inbox/social/news/.gitkeep
 literature/pdfs/open_access/*
 !literature/pdfs/open_access/.gitkeep
 literature/processed/full_text/
@@ -12,6 +22,7 @@ datasets/
 logs/
 outputs/tmp/*
 !outputs/tmp/.gitkeep
+.local/
 
 *.pdf
 *.log

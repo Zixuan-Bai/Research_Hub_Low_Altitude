@@ -22,9 +22,7 @@ def discover_pdfs(pdf_dir: Path) -> list[Path]:
 
 
 def choose_topic(pdf_path: Path, requested_topic: str, config: dict) -> tuple[str, float, str]:
-    if requested_topic != "auto":
-        return hub.topic_key_to_slug(config).get(requested_topic, requested_topic), 1.0, "manual topic"
-    return hub.infer_topic_for_pdf(pdf_path, config)
+    return hub.resolve_topic_for_pdf(pdf_path, requested_topic, config)
 
 
 def main() -> int:
@@ -58,7 +56,10 @@ def main() -> int:
     planned: list[tuple[Path, str, float, str]] = []
     skipped = 0
     for pdf_path in pdfs:
-        if not args.force and hub.find_existing_note_for_pdf(pdf_path, items):
+        existing = hub.find_existing_note_for_pdf(pdf_path, items)
+        if not args.force and existing:
+            if not args.dry_run:
+                hub.sync_existing_item_for_pdf(pdf_path, existing)
             skipped += 1
             continue
         topic, score, reason = choose_topic(pdf_path, args.topic, config)

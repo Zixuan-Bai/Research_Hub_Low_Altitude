@@ -48,8 +48,10 @@ python -m streamlit run scripts/review_app.py
 PDF 阅读不放在 GitHub Actions 里，因为它依赖本地 PDF 和私有 API key：
 
 ```powershell
-python scripts/read_item.py "literature/inbox/papers/example.pdf" --topic remote_id
+python scripts/read_item.py "literature/inbox/papers/example.pdf"
 ```
+
+默认会自动推断 topic。无法可靠归类的 PDF 会进入 `needs_topic_review`，适合先生成 note，再在 GUI 的 Topic 审核里人工划分。
 
 输出中文笔记到：
 

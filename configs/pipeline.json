@@ -28,6 +28,7 @@
     "remote_id": "literature/queries/remote_id.yaml",
     "dtmb": "literature/queries/dtmb_broadcast.yaml",
     "formation_safety": "literature/queries/formation_safety.yaml",
-    "directional_networking": "literature/queries/directional_networking.yaml"
+    "directional_networking": "literature/queries/directional_networking.yaml",
+    "structured_air_space": "literature/queries/structured_air_space.yaml"
   }
 }

@@ -27,6 +27,7 @@ ITEMS_PATH = Path("data/items.jsonl")
 MANUAL_ITEMS_PATH = Path("data/manual_items.jsonl")
 DEFAULT_CONFIG = Path("configs/pipeline.json")
 DEFAULT_CONTEXT_CONFIG = Path("configs/context_sources.json")
+PDF_TEXT_CACHE_DIR = Path(".local/pdf_text_cache")
 USER_AGENT = "low-altitude-research-hub/0.2"
 NEEDS_TOPIC_REVIEW = "needs_topic_review"
 REVIEW_STATUSES = {"new", "kept", "rejected", "downloaded"}
@@ -39,6 +40,16 @@ PROCESS_RANK = {
     "summarized": 2,
     "used_in_synthesis": 3,
 }
+SOURCE_TYPE_LABELS = {
+    "paper": "论文",
+    "standard": "标准",
+    "policy": "政策",
+    "whitepaper": "白皮书",
+    "report": "报告",
+    "industry": "产业信号",
+    "news": "新闻/动态",
+}
+CONTEXT_SOURCE_TYPES = {"news", "standard", "policy", "whitepaper", "report", "industry"}
 
 
 def now_iso() -> str:
@@ -64,6 +75,32 @@ def slugify(value: str) -> str:
     return "".join(chars).strip("_") or "item"
 
 
+def normalize_topic_list(values: Iterable[object], primary_topic: str = "") -> list[str]:
+    topics: list[str] = []
+    for value in [primary_topic, *list(values)]:
+        if value is None:
+            continue
+        for part in re.split(r"[,;\n，；\s]+", str(value)):
+            topic = slugify(part)
+            if topic and topic not in topics and topic != NEEDS_TOPIC_REVIEW:
+                topics.append(topic)
+    return topics
+
+
+def item_topics(item: dict) -> list[str]:
+    raw_topics = item.get("topics") or []
+    if isinstance(raw_topics, str):
+        raw_topics = re.split(r"[,;\n，；\s]+", raw_topics)
+    elif not isinstance(raw_topics, list):
+        raw_topics = []
+    return normalize_topic_list(raw_topics, str(item.get("topic") or ""))
+
+
+def item_has_topic(item: dict, topic: str) -> bool:
+    topic = slugify(topic)
+    return topic == str(item.get("topic") or "") or topic in item_topics(item)
+
+
 def safe_filename(value: str, fallback: str = "item", max_length: int = 140) -> str:
     value = normalize_space(value)
     value = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", value)
@@ -73,6 +110,10 @@ def safe_filename(value: str, fallback: str = "item", max_length: int = 140) -> 
     if len(value) > max_length:
         value = value[:max_length].rstrip(" ._")
     return value or fallback
+
+
+def safe_filename_part(value: str, fallback: str, max_length: int = 60) -> str:
+    return safe_filename(value, fallback=fallback, max_length=max_length)
 
 
 def normalize_space(value: str) -> str:
@@ -126,6 +167,11 @@ def load_config(path: Path = DEFAULT_CONFIG) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def write_config(config: dict, path: Path = DEFAULT_CONFIG) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
 def parse_simple_query_yaml(path: Path) -> dict[str, object]:
     topic = ""
     description = ""
@@ -177,6 +223,141 @@ def selected_query_files(topic: str, config: dict) -> list[Path]:
             return [query_files[key]]
     candidate = Path(f"literature/queries/{topic}.yaml")
     return [candidate]
+
+
+def query_file_for_topic(topic: str, config: dict | None = None) -> Path:
+    config = config if config is not None else load_config()
+    slug_map = topic_key_to_slug(config)
+    query_files = topic_key_to_query_files(config)
+    for key, slug in slug_map.items():
+        if topic == slug:
+            return query_files[key]
+    if topic in query_files:
+        return query_files[topic]
+    return Path("literature/queries") / f"{slugify(topic)}.yaml"
+
+
+def topic_config_key(topic_slug: str, existing: dict[str, str]) -> str:
+    key = slugify(topic_slug)
+    if key not in existing:
+        return key
+    index = 2
+    while f"{key}_{index}" in existing:
+        index += 1
+    return f"{key}_{index}"
+
+
+def write_topic_query_template(path: Path, topic_slug: str, title_hint: str = "") -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    description = f"Candidate topic created from GUI review. Seed title: {title_hint}".strip()
+    text = f"""topic: {topic_slug}
+status: needs_keywords
+description: {description}
+
+seed_keywords:
+  - {topic_slug.replace("_", " ")}
+
+required_terms_any:
+  - UAV
+  - UAS
+  - drone
+  - low altitude
+
+exclude_terms_any:
+  - unrelated
+
+must_extract:
+  - problem setting
+  - method
+  - assumptions
+  - evidence
+  - limitations
+
+exclude:
+  - papers unrelated to low-altitude communication or autonomous aerial systems
+"""
+    path.write_text(text, encoding="utf-8")
+
+
+def ensure_topic_exists(topic_slug: str, title_hint: str = "", config_path: Path = DEFAULT_CONFIG) -> tuple[Path, bool]:
+    topic_slug = slugify(topic_slug)
+    config = load_config(config_path)
+    topics = dict(config.get("topics") or {})
+    slug_map = topic_key_to_slug(config)
+    if topic_slug in slug_map.values():
+        return query_file_for_topic(topic_slug, config), False
+    query_path = Path("literature/queries") / f"{topic_slug}.yaml"
+    if not query_path.exists():
+        write_topic_query_template(query_path, topic_slug, title_hint)
+    key = topic_config_key(topic_slug, topics)
+    topics[key] = query_path.as_posix()
+    config["topics"] = topics
+    write_config(config, config_path)
+    return query_path, True
+
+
+def topic_query_improvement_prompt(topic_slug: str, query_path: Path, query: dict) -> str:
+    query_text = query_path.read_text(encoding="utf-8", errors="ignore") if query_path.exists() else ""
+    return f"""请帮我补全低空研究情报库的 topic query 配置。
+
+仓库定位：
+- 这是 Level 0 研究情报库，不要生成最终研究方向、创新性判断或路线卡。
+- topic 只用于每周收集、筛选和后续人工复核。
+- 输出应保守，区分 paper-supported / inferred / proposal / unsupported。
+
+目标：
+1. 保留 topic slug：`{topic_slug}`。
+2. 根据这个 topic，补充接近现有 `literature/queries/*.yaml` 信息量的 query 配置。
+3. 增加足够的 `seed_keywords`、`required_terms_any`、`exclude_terms_any`、`must_extract` 和 `exclude`。
+4. 关键词需要覆盖低空通信 / UAV 系统 / 监管或工程约束中的相关表达，避免把无关交通、泛 IoT、泛机器人论文大量收进来。
+5. 如果信息不足，请用 `needs-review` 标出需要我人工确认的部分，不要编造标准号、论文或事实。
+
+当前文件：`{query_path.as_posix()}`
+
+当前内容：
+```yaml
+{query_text.strip()}
+```
+
+请只返回建议替换的 YAML 内容。"""
+
+
+def topic_query_needs_keywords(topic_slug: str, config: dict | None = None) -> tuple[bool, Path, dict]:
+    config = config if config is not None else load_config()
+    query_path = query_file_for_topic(topic_slug, config)
+    query = parse_simple_query_yaml(query_path)
+    seed = [value for value in query.get("seed_keywords", []) or [] if value]
+    required = [value for value in query.get("required_terms_any", []) or [] if value]
+    status_needs = "needs_keywords" in query_path.read_text(encoding="utf-8", errors="ignore") if query_path.exists() else True
+    return status_needs or len(seed) < 5 or len(required) < 5, query_path, query
+
+
+def topics_needing_query_review(config: dict | None = None) -> list[dict]:
+    config = config if config is not None else load_config()
+    rows: list[dict] = []
+    for topic in sorted(set(topic_key_to_slug(config).values())):
+        needs_review, query_path, query = topic_query_needs_keywords(topic, config)
+        if not needs_review:
+            continue
+        rows.append(
+            {
+                "topic": topic,
+                "query_path": query_path,
+                "query": query,
+                "seed_keyword_count": len(query.get("seed_keywords", []) or []),
+                "required_term_count": len(query.get("required_terms_any", []) or []),
+                "prompt": topic_query_improvement_prompt(topic, query_path, query),
+            }
+        )
+    return rows
+
+
+def resolve_topic_for_pdf(pdf_path: Path, requested_topic: str, config: dict) -> tuple[str, float, str]:
+    if requested_topic != "auto":
+        topic = topic_key_to_slug(config).get(requested_topic, requested_topic)
+        ensure_topic_exists(topic, title_hint=extract_pdf_title(pdf_path) or pdf_path.stem)
+        return topic, 1.0, "manual topic"
+    return infer_topic_for_pdf(pdf_path, config)
 
 
 def topic_vocabulary(config: dict) -> dict[str, set[str]]:
@@ -287,6 +468,249 @@ def sync_status_fields(item: dict) -> dict:
     return item
 
 
+def markdown_plain(value: str) -> str:
+    value = re.sub(r"`([^`]*)`", r"\1", value or "")
+    value = re.sub(r"\*\*([^*]*)\*\*", r"\1", value)
+    value = re.sub(r"\*([^*]*)\*", r"\1", value)
+    return normalize_space(value.strip(" -：:。；;，,"))
+
+
+def strip_evidence_prefix(value: str) -> tuple[str, str]:
+    text = markdown_plain(value)
+    match = re.match(r"^(paper-supported|inferred|proposal|unsupported)\s*[:：]\s*(?P<body>.+)$", text)
+    if not match:
+        return "", text
+    return match.group(1), normalize_space(match.group("body"))
+
+
+def note_section(note: str, title: str) -> str:
+    pattern = re.compile(rf"^#+\s*{re.escape(title)}\s*$", re.MULTILINE)
+    match = pattern.search(note)
+    if not match:
+        return ""
+    next_heading = re.search(r"^#+\s+", note[match.end() :], flags=re.MULTILINE)
+    end = match.end() + next_heading.start() if next_heading else len(note)
+    return note[match.end() : end].strip()
+
+
+def metadata_from_note(note: str) -> dict:
+    section = note_section(note, "元数据")
+    result: dict[str, str] = {}
+    if not section:
+        return result
+    for raw_line in section.splitlines():
+        line = raw_line.strip()
+        if not line.startswith(("-", "*")):
+            continue
+        evidence, body = strip_evidence_prefix(line.lstrip("-* "))
+        if evidence == "unsupported" and "doi" in body.lower() and any(term in body for term in ["不一致", "错误", "不匹配"]):
+            result["doi_conflict"] = body
+            continue
+        if evidence and evidence != "paper-supported":
+            continue
+        if "：" in body:
+            key, value = body.split("：", 1)
+        elif ":" in body:
+            key, value = body.split(":", 1)
+        else:
+            continue
+        key = markdown_plain(key)
+        value = markdown_plain(value)
+        if not value or any(term in value for term in ["未提供", "不一致", "unknown", "metadata only"]):
+            continue
+        if "标题" in key:
+            result["title"] = value
+        elif "作者" in key:
+            result["authors"] = re.sub(r"[、,，]\s*", "; ", value)
+        elif "年份" in key or key.lower() == "year":
+            year = re.search(r"(19|20)\d{2}", value)
+            if year:
+                result["year"] = year.group(0)
+        elif "doi" in key.lower():
+            doi = re.search(r"10\.\d{4,9}/[-._;()/:A-Za-z0-9]+", value)
+            if doi:
+                result["doi"] = doi.group(0).rstrip(").,;")
+        elif any(term in key.lower() for term in ["venue", "期刊", "会议", "发表信息"]):
+            result["venue"] = value
+            year = re.search(r"(19|20)\d{2}", value)
+            if year and "year" not in result:
+                result["year"] = year.group(0)
+        elif "出版商" in key or "publisher" in key.lower():
+            result["publisher"] = value
+    return result
+
+
+def follow_up_actions_from_note(note: str, item_id_value: str, existing: list[dict] | None = None) -> list[dict]:
+    section = note_section(note, "后续建议") or note_section(note, "后续动作")
+    if not section:
+        return existing or []
+    existing_by_text = {normalize_space(str(action.get("text", ""))): action for action in existing or []}
+    actions: list[dict] = []
+    for raw_line in section.splitlines():
+        line = raw_line.strip()
+        if not line.startswith(("-", "*")):
+            continue
+        _evidence, text = strip_evidence_prefix(line.lstrip("-* "))
+        text = normalize_space(text)
+        if not text:
+            continue
+        previous = existing_by_text.get(text, {})
+        action_id = previous.get("id") or stable_id(item_id_value, text)[:10]
+        actions.append(
+            {
+                "id": action_id,
+                "text": text,
+                "status": previous.get("status") or "open",
+                "source": previous.get("source") or "note",
+                "created_at": previous.get("created_at") or now_iso(),
+                "completed_at": previous.get("completed_at") or "",
+            }
+        )
+    return actions
+
+
+def should_replace_with_note_metadata(item: dict, field: str, value: str) -> bool:
+    if not value:
+        return False
+    current = normalize_space(str(item.get(field) or ""))
+    if field == "title":
+        weak_titles = {"", "general rights", "title title title title title"}
+        return current.lower() in weak_titles or item.get("source") == "local_pdf" or metadata_status(item) == "needs_review"
+    if field == "date":
+        return current != value
+    return False
+
+
+def apply_note_metadata(item: dict, note: str) -> dict:
+    extracted = metadata_from_note(note)
+    if not extracted:
+        return item
+    metadata = item.setdefault("metadata", {})
+    changed = False
+    if extracted.get("title") and should_replace_with_note_metadata(item, "title", extracted["title"]):
+        item["title"] = extracted["title"]
+        changed = True
+    if extracted.get("year"):
+        if should_replace_with_note_metadata(item, "date", extracted["year"]):
+            item["date"] = extracted["year"]
+            changed = True
+        if metadata.get("year") != extracted["year"]:
+            metadata["year"] = extracted["year"]
+            changed = True
+    for key in ["authors", "venue", "publisher"]:
+        if extracted.get(key) and metadata.get(key) != extracted[key]:
+            metadata[key] = extracted[key]
+            changed = True
+    if extracted.get("doi") and (not metadata.get("doi") or metadata_status(item) == "needs_review"):
+        metadata["doi"] = extracted["doi"]
+        changed = True
+    if extracted.get("doi_conflict") and metadata.get("doi"):
+        metadata["conflicting_doi_note"] = extracted["doi_conflict"]
+        metadata["conflicting_doi_value"] = metadata.pop("doi")
+        if str(item.get("url", "")).startswith("https://doi.org/"):
+            item["url"] = ""
+        changed = True
+    if changed:
+        metadata["llm_metadata_extracted_at"] = now_iso()
+        metadata["llm_metadata_needs_review"] = True
+        item["metadata_status"] = "needs_review"
+    return item
+
+
+def apply_note_follow_up_actions(item: dict, note: str) -> dict:
+    metadata = item.setdefault("metadata", {})
+    existing = list(metadata.get("follow_up_actions") or [])
+    actions = follow_up_actions_from_note(note, str(item.get("id") or ""), existing)
+    if actions:
+        metadata["follow_up_actions"] = actions
+    return item
+
+
+def apply_note_derived_fields(item: dict, note: str) -> dict:
+    item = apply_note_metadata(item, note)
+    item = apply_note_follow_up_actions(item, note)
+    return item
+
+
+def backfill_metadata_from_item_note(item: dict) -> dict:
+    note_path_value = item.get("note_path")
+    if not note_path_value:
+        return item
+    path = Path(str(note_path_value))
+    if not path.exists():
+        return item
+    note = path.read_text(encoding="utf-8", errors="replace")
+    return apply_note_derived_fields(item, note)
+
+
+def item_year(item: dict) -> str:
+    metadata = item.get("metadata") or {}
+    return normalize_space(str(metadata.get("year") or item.get("date") or "year-unknown"))
+
+
+def item_source_label(item: dict) -> str:
+    metadata = item.get("metadata") or {}
+    return normalize_space(
+        str(
+            metadata.get("venue")
+            or metadata.get("publisher")
+            or item.get("source")
+            or item.get("source_type")
+            or "source-unknown"
+        )
+    )
+
+
+def item_human_annotation(item: dict) -> str:
+    metadata = item.get("metadata") or {}
+    for key in ["human_annotation_zh", "title_annotation_zh", "annotation_zh", "note_annotation_zh"]:
+        value = normalize_space(str(metadata.get(key) or ""))
+        if value:
+            return value.strip("【】[]")
+    return ""
+
+
+def extract_human_annotation_from_name(value: str) -> str:
+    match = re.match(r"^\s*【(?P<annotation>[^】]{1,80})】", value or "")
+    if not match:
+        return ""
+    return normalize_space(match.group("annotation"))
+
+
+def sync_human_annotation_from_pdf_name(item: dict, pdf_path: Path | None = None) -> dict:
+    metadata = item.setdefault("metadata", {})
+    candidates = []
+    if pdf_path is not None:
+        candidates.append(pdf_path.name)
+    if metadata.get("pdf_source"):
+        candidates.append(Path(str(metadata["pdf_source"])).name)
+    if metadata.get("pdf_source_original_name"):
+        candidates.append(str(metadata["pdf_source_original_name"]))
+    for name in candidates:
+        annotation = extract_human_annotation_from_name(name)
+        if annotation:
+            metadata["human_annotation_zh"] = annotation
+            return item
+    return item
+
+
+def item_canonical_stem(item: dict) -> str:
+    """Canonical local PDF/note stem: optional Chinese annotation, year, source, title, id."""
+    annotation = item_human_annotation(item)
+    parts = []
+    if annotation:
+        parts.append(f"【{annotation}】")
+    parts.extend(
+        [
+            safe_filename_part(item_year(item), "year-unknown", 24),
+            safe_filename_part(item_source_label(item), "source-unknown", 42),
+            safe_filename_part(str(item.get("title") or ""), str(item.get("id") or "item"), 96),
+            safe_filename_part(str(item.get("id") or item_id(title=str(item.get("title") or ""))), "id", 24),
+        ]
+    )
+    return safe_filename("-".join(part for part in parts if part), fallback=str(item.get("id") or "item"), max_length=190)
+
+
 def make_item(
     *,
     title: str,
@@ -352,6 +776,8 @@ def source_authority_score(item: dict) -> tuple[int, str]:
         if any(term in text for term in ["icao", "easa", "faa", "etsi", "3gpp", "itu", "ieee", "nist", "gov", "europa.eu"]):
             return 5, "recognized standards/government/technical report source"
         return 4, "whitepaper/report source type"
+    if source_type == "industry":
+        return 3, "industry/deployment signal; requires corroboration"
     if source_type == "news":
         if any(term in text for term in ["reuters", "associated press", "apnews", "bbc", "nature.com", "science.org"]):
             return 4, "recognized news/science outlet"
@@ -423,13 +849,15 @@ def upsert_items(incoming_items: Iterable[dict], path: Path = ITEMS_PATH) -> tup
             item.setdefault("created_at", now_iso())
             item["updated_at"] = now_iso()
             by_id[item["id"]] = item
+        by_id[item["id"]] = sync_pdf_filename(by_id[item["id"]])
+        by_id[item["id"]] = sync_note_filename(by_id[item["id"]])
         changed_or_new.append(by_id[item["id"]])
     rows = sorted(by_id.values(), key=lambda row: (row.get("topic", ""), row.get("date", ""), row.get("title", "")), reverse=True)
     write_jsonl(path, rows)
     return rows, changed_or_new
 
 
-def update_item(item: dict, path: Path = ITEMS_PATH) -> None:
+def update_item(item: dict, path: Path = ITEMS_PATH, apply_note_backfill: bool = True) -> None:
     rows = load_items(path)
     by_id = {row["id"]: row for row in rows if row.get("id")}
     item = sync_status_fields(item)
@@ -437,6 +865,10 @@ def update_item(item: dict, path: Path = ITEMS_PATH) -> None:
     authority, reason = source_authority_score(item)
     item["authority_score"] = authority
     item.setdefault("metadata", {})["authority_reason"] = reason
+    item = sync_human_annotation_from_pdf_name(item)
+    if apply_note_backfill:
+        item = backfill_metadata_from_item_note(item)
+    item = sync_pdf_filename(item)
     item = sync_note_filename(item)
     by_id[item["id"]] = item
     write_jsonl(path, sorted(by_id.values(), key=lambda row: (row.get("topic", ""), row.get("date", ""), row.get("title", "")), reverse=True))
@@ -468,6 +900,25 @@ def find_existing_note_for_pdf(pdf_path: Path, items: list[dict] | None = None) 
     return None
 
 
+def sync_existing_item_for_pdf(pdf_path: Path, item: dict) -> dict:
+    """Update stored PDF path/name and note filename when a known PDF is seen again."""
+    item_id_value = item.get("id")
+    rows = load_items()
+    current = next((row for row in rows if row.get("id") == item_id_value), None)
+    if current is None:
+        return item
+    metadata = current.setdefault("metadata", {})
+    metadata["pdf_source"] = str(pdf_path)
+    metadata["pdf_fingerprint"] = sha256_file(pdf_path)
+    current = sync_human_annotation_from_pdf_name(current, pdf_path)
+    current = backfill_metadata_from_item_note(current)
+    current = sync_pdf_filename(current, pdf_path)
+    current = sync_note_filename(current)
+    update_item(current)
+    refreshed = next((row for row in load_items() if row.get("id") == item_id_value), current)
+    return refreshed
+
+
 def prepare_pdf_item(pdf_path: Path, topic: str, providers: list[str], lookup_limit: int) -> tuple[dict, float, str]:
     item, confidence, reason = lookup_pdf_item(pdf_path, topic, providers, lookup_limit)
     item["topic"] = topic
@@ -484,6 +935,7 @@ def prepare_pdf_item(pdf_path: Path, topic: str, providers: list[str], lookup_li
     metadata["pdf_fingerprint"] = sha256_file(pdf_path)
     metadata["metadata_match_confidence"] = round(confidence, 3)
     metadata["metadata_match_reason"] = reason
+    item = sync_human_annotation_from_pdf_name(item, pdf_path)
     item["metadata_status"] = "needs_review" if confidence < 0.72 else metadata_status(item)
     return sync_status_fields(item), confidence, reason
 
@@ -492,14 +944,19 @@ def read_pdf_to_note(pdf_path: Path, item: dict, config: dict, timeout: int) -> 
     note, model = kimi_read_pdf(pdf_path, item, config, timeout)
     if not note.strip():
         raise RuntimeError("Kimi returned an empty note.")
+    item = apply_note_derived_fields(item, note)
     item["process_status"] = "summarized"
     item["updated_at"] = now_iso()
-    note_path = write_item_note(item, note, pdf_path, model)
-    item["note_path"] = str(note_path)
     metadata = item.setdefault("metadata", {})
     metadata["pdf_fingerprint"] = sha256_file(pdf_path)
-    metadata["reading_status"] = "read"
+    metadata["pdf_source"] = str(pdf_path)
+    metadata["reading_status"] = "model_parsed_pdf"
     metadata["summary_status"] = "summarized"
+    metadata.setdefault("visual_status", "not_parsed")
+    item = sync_pdf_filename(item, pdf_path)
+    pdf_path = Path(metadata.get("pdf_source", pdf_path))
+    note_path = write_item_note(item, note, pdf_path, model, reading_status="model_parsed_pdf")
+    item["note_path"] = str(note_path)
     item = sync_status_fields(item)
     all_items, _ = upsert_items([item])
     write_review_dashboard(all_items)
@@ -739,7 +1196,7 @@ def load_context_source_config(path: Path = DEFAULT_CONTEXT_CONFIG) -> dict:
 
 def normalize_source_type(value: str) -> str:
     value = (value or "news").strip().lower()
-    allowed = {"news", "standard", "policy", "whitepaper", "report"}
+    allowed = {"news", "standard", "policy", "whitepaper", "report", "industry"}
     return value if value in allowed else "news"
 
 
@@ -864,13 +1321,17 @@ def dedupe_items(items: Iterable[dict]) -> list[dict]:
 def item_line(item: dict) -> str:
     title = item.get("title", "未命名条目")
     topic = item.get("topic", "unknown")
+    topics = ", ".join(item_topics(item)) or str(topic)
     source = item.get("source", "")
+    source_type = str(item.get("source_type") or "unknown")
+    type_label = SOURCE_TYPE_LABELS.get(source_type, source_type)
+    database = "论文数据库" if source_type == "paper" else "社会数据库" if source_type in CONTEXT_SOURCE_TYPES else "其他条目"
     score = item.get("score", "")
     authority = item.get("authority_score", "")
     url = item.get("url", "")
     link = f" [{source}]({url})" if url else f" [{source}]"
     return (
-        f"- **{title}**{link}；主题：`{topic}`；相关性：{score}；权威性：{authority}；"
+        f"- **{title}**{link}；数据库：{database}；类型：{type_label} (`{source_type}`)；主主题：`{topic}`；topics：`{topics}`；相关性：{score}；权威性：{authority}；"
         f"review_status：`{review_status(item)}`；process_status：`{process_status(item)}`；"
         f"metadata_status：`{metadata_status(item)}`"
     )
@@ -881,7 +1342,7 @@ def write_weekly_digest(items: list[dict], run_items: list[dict], output_date: s
     path = Path("outputs/weekly") / f"{output_date}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     papers = [item for item in run_items if item.get("source_type") == "paper" and item.get("score", 0) > 0]
-    context_items = [item for item in run_items if item.get("source_type") in {"news", "standard", "policy", "whitepaper", "report"} and item.get("score", 0) > 0]
+    context_items = [item for item in run_items if item.get("source_type") in {"news", "standard", "policy", "whitepaper", "report", "industry"} and item.get("score", 0) > 0]
     top_items = sorted([item for item in run_items if item.get("score", 0) > 0], key=lambda row: int(row.get("score") or 0), reverse=True)[:12]
     downloadable = [item for item in papers if item.get("pdf_url")][:10]
     reading = sorted(papers, key=lambda row: int(row.get("score") or 0), reverse=True)[:10]
@@ -927,7 +1388,7 @@ def write_weekly_digest(items: list[dict], run_items: list[dict], output_date: s
         "",
         "1. 打开 Streamlit review app 或 `outputs/review_dashboard.md`，先处理相关性和权威性都较高的 `new` 条目。",
         "2. 对明确有价值的条目标记为 `kept`；对无关条目标记为 `rejected`。",
-        "3. 对需要精读的 PDF 运行 `python scripts/read_item.py <pdf路径> --topic <topic>`。",
+        "3. 对需要精读的 PDF，可在 GUI 的复核条目中点击读取按钮；命令行也可运行 `python scripts/read_item.py <pdf路径>`，默认先自动推断 topic，无法确认时进入 Topic 审核。",
         "4. topic 下已读中文笔记达到 10 篇左右后，再运行 `python scripts/synthesize_topic.py --topic <topic>`。",
         "",
     ]
@@ -949,6 +1410,38 @@ def write_review_dashboard(items: list[dict], path: Path = Path("outputs/review_
         "- 元数据状态 `metadata_status`：`auto` / `needs_review` / `verified`，GUI 保存 metadata 后会标记为 `verified`。",
         "",
     ]
+    needs_metadata = sorted([item for item in items if metadata_status(item) == "needs_review"], key=lambda row: int(row.get("score") or 0), reverse=True)
+    lines += ["## 元数据待复核", ""]
+    if needs_metadata:
+        lines.extend(item_line(item) for item in needs_metadata[:50])
+    else:
+        lines.append("暂无。")
+    lines.append("")
+    open_actions = []
+    for item in items:
+        for action in (item.get("metadata") or {}).get("follow_up_actions") or []:
+            if action.get("status") == "open":
+                open_actions.append((item, action))
+    lines += ["## 后续建议待处理", ""]
+    if open_actions:
+        for item, action in open_actions[:80]:
+            lines.append(f"- `{action.get('id', '')}` **{item.get('title', '未命名条目')}**：{action.get('text', '')}")
+    else:
+        lines.append("暂无。")
+    lines.append("")
+    lines += ["## 按数据库视图", ""]
+    database_groups = [
+        ("论文数据库", [item for item in items if item.get("source_type") == "paper"]),
+        ("社会数据库", [item for item in items if item.get("source_type") in CONTEXT_SOURCE_TYPES]),
+    ]
+    for title, rows in database_groups:
+        lines += [f"### {title}", ""]
+        if rows:
+            sorted_rows = sorted(rows, key=lambda row: (str(row.get("source_type") or ""), int(row.get("score") or 0)), reverse=True)
+            lines.extend(item_line(item) for item in sorted_rows[:50])
+        else:
+            lines.append("暂无。")
+        lines.append("")
     lines += ["## 按人工状态", ""]
     for status in ["new", "kept", "downloaded", "rejected"]:
         rows = sorted([item for item in items if review_status(item) == status], key=lambda row: int(row.get("score") or 0), reverse=True)
@@ -1243,10 +1736,10 @@ PDF fingerprint: {fingerprint}
 ## 局限性
 ## 与低空研究的关联
 ## 可复用参数 / 模型 / 基线
-## 后续动作
+## 后续建议
 ## 可靠性说明
 
-每个实质性 bullet 必须以 `paper-supported:`、`inferred:`、`proposal:` 或 `unsupported:` 开头。后续动作只能是继续阅读、核验参数、补充 metadata、查找政策/标准/产业背景等审查任务。
+每个实质性 bullet 必须以 `paper-supported:`、`inferred:`、`proposal:` 或 `unsupported:` 开头。后续建议只能是继续阅读、核验参数、补充 metadata、查找政策/标准/产业背景等审查任务。
 """
 
 
@@ -1272,17 +1765,48 @@ def kimi_read_pdf(pdf_path: Path, item: dict, config: dict, timeout: int = 300) 
 
 def read_pdf_metadata_only(pdf_path: Path, item: dict) -> tuple[dict, Path | None, str]:
     metadata = item.setdefault("metadata", {})
+    item = sync_human_annotation_from_pdf_name(item, pdf_path)
     metadata["pdf_fingerprint"] = sha256_file(pdf_path)
+    metadata["pdf_source"] = str(pdf_path)
+    metadata["reading_status"] = "metadata_only"
+    metadata["summary_status"] = "metadata-only"
+    metadata["visual_status"] = "not_parsed"
     metadata["reading_mode"] = "metadata-only"
     item["process_status"] = process_status(item)
+    item = sync_pdf_filename(item, pdf_path)
     item = sync_status_fields(item)
     all_items, changed = upsert_items([item])
     write_review_dashboard(all_items)
     return changed[0], None, "metadata-only"
 
 
-def build_text_draft_note(pdf_path: Path, item: dict, extracted_text: str) -> str:
+def pdf_text_cache_path(item: dict) -> Path:
+    return PDF_TEXT_CACHE_DIR / f"{item_canonical_stem(item)}.txt"
+
+
+def write_pdf_text_cache(item: dict, extracted_text: str) -> Path:
+    path = pdf_text_cache_path(item)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(extracted_text, encoding="utf-8")
+    return path
+
+
+def text_page_hints(extracted_text: str, max_hints: int = 5, max_chars: int = 260) -> list[str]:
+    chunks = [normalize_space(chunk) for chunk in re.split(r"\n\s*\n|(?<=\.)\s+", extracted_text) if normalize_space(chunk)]
+    hints: list[str] = []
+    for chunk in chunks:
+        if len(chunk) < 80:
+            continue
+        hints.append(chunk[:max_chars].rstrip())
+        if len(hints) >= max_hints:
+            break
+    return hints
+
+
+def build_text_draft_note(pdf_path: Path, item: dict, extracted_text: str, cache_path: Path) -> str:
     metadata = item.get("metadata") or {}
+    hints = text_page_hints(extracted_text)
+    hint_lines = "\n".join(f"- abstract only: {hint}" for hint in hints) if hints else "- needs-review: pypdf 未抽取到可用短片段。"
     return f"""# 条目摘要
 
 ## 元数据
@@ -1290,7 +1814,8 @@ def build_text_draft_note(pdf_path: Path, item: dict, extracted_text: str) -> st
 - 年份：{metadata.get("year") or item.get("date") or "metadata only"}
 - 来源：{metadata.get("venue") or metadata.get("publisher") or item.get("source", "")}
 - DOI：{metadata.get("doi") or "metadata only"}
-- 状态：full-text parsed；text-draft；needs-review
+- 状态：text_extracted；text-draft；not_parsed；needs-review
+- 本地原文缓存：`{cache_path.as_posix()}`（`.local/` 下文件不提交）
 
 ## 收录原因
 - inferred: 该条目由本地 PDF 读取流程导入，topic 为 `{item.get("topic", "")}`；需要人工复核相关性。
@@ -1302,14 +1827,11 @@ def build_text_draft_note(pdf_path: Path, item: dict, extracted_text: str) -> st
 - needs-review: 请基于 PDF 原文人工或使用 Kimi 模式补充。
 
 ## 关键证据
-- needs-review: 以下为自动抽取文本片段，不等于人工确认事实。
-
-```text
-{extracted_text[:12000]}
-```
+- needs-review: 不在笔记中保存长篇 PDF 抽取文本，避免版权与仓库存储风险。原始抽取文本仅保存在本地忽略缓存。
+{hint_lines}
 
 ## 局限性
-- paper-supported: 仅当上述抽取文本中明确出现的信息才可作为初步依据。
+- unsupported: 短片段只用于定位阅读入口，不等于人工确认事实。
 - unsupported: 本草稿不支持研究 gap、创新性或最终方向判断。
 
 ## 与低空研究的关联
@@ -1318,11 +1840,12 @@ def build_text_draft_note(pdf_path: Path, item: dict, extracted_text: str) -> st
 ## 可复用参数 / 模型 / 基线
 - needs-review: 尚未结构化提取。
 
-## 后续动作
-- proposal: 若该条目重要，使用 `python scripts/read_item.py "{pdf_path}" --topic {item.get("topic", "")} --mode kimi` 生成精读笔记。
+## 后续建议
+- proposal: 若该条目重要，使用 GUI 的复核条目读取按钮，或运行 `python scripts/read_item.py "{pdf_path}" --mode kimi` 生成精读笔记；默认会自动推断 topic，无法确认时进入 Topic 审核。
 
 ## 可靠性说明
-- full-text parsed
+- text_extracted
+- visual_status: not_parsed
 - machine-generated
 - needs-review
 """
@@ -1332,15 +1855,22 @@ def read_pdf_to_text_draft(pdf_path: Path, item: dict) -> tuple[dict, Path, str]
     text = extract_pdf_text_with_pypdf(pdf_path)
     if not text.strip():
         raise RuntimeError("Could not extract readable PDF text with pypdf/PyPDF2.")
-    note = build_text_draft_note(pdf_path, item, text)
     item["process_status"] = "read"
     item["updated_at"] = now_iso()
     metadata = item.setdefault("metadata", {})
+    item = sync_human_annotation_from_pdf_name(item, pdf_path)
     metadata["pdf_fingerprint"] = sha256_file(pdf_path)
-    metadata["reading_status"] = "full-text parsed"
+    metadata["pdf_source"] = str(pdf_path)
+    metadata["reading_status"] = "text_extracted"
     metadata["summary_status"] = "text-draft"
+    metadata["visual_status"] = "not_parsed"
     metadata["reading_mode"] = "text-draft"
-    note_path = write_item_note(item, note, pdf_path, "text-draft", provider="pypdf", reading_status="full-text parsed")
+    item = sync_pdf_filename(item, pdf_path)
+    pdf_path = Path(metadata.get("pdf_source", pdf_path))
+    cache_path = write_pdf_text_cache(item, text)
+    metadata["pdf_text_cache"] = cache_path.as_posix()
+    note = build_text_draft_note(pdf_path, item, text, cache_path)
+    note_path = write_item_note(item, note, pdf_path, "text-draft", provider="pypdf", reading_status="text_extracted")
     item["note_path"] = str(note_path)
     item = sync_status_fields(item)
     all_items, _ = upsert_items([item])
@@ -1353,8 +1883,7 @@ def legacy_note_path_for_item(item: dict) -> Path:
 
 
 def note_path_for_item(item: dict) -> Path:
-    title = safe_filename(str(item.get("title", "")), fallback=str(item.get("id", "item")))
-    preferred = Path("notes/items") / f"{title}.md"
+    preferred = preferred_note_path_for_item(item)
     legacy = legacy_note_path_for_item(item)
     if preferred.exists() or not legacy.exists():
         return preferred
@@ -1362,8 +1891,47 @@ def note_path_for_item(item: dict) -> Path:
 
 
 def preferred_note_path_for_item(item: dict) -> Path:
-    title = safe_filename(str(item.get("title", "")), fallback=str(item.get("id", "item")))
-    return Path("notes/items") / f"{title}.md"
+    return Path("notes/items") / f"{item_canonical_stem(item)}.md"
+
+
+def preferred_pdf_path_for_item(item: dict, pdf_path: Path) -> Path:
+    return pdf_path.with_name(f"{item_canonical_stem(item)}{pdf_path.suffix.lower() or '.pdf'}")
+
+
+def unique_path(path: Path, current: Path | None = None) -> Path:
+    if current is not None:
+        try:
+            if path.resolve() == current.resolve():
+                return path
+        except OSError:
+            if path == current:
+                return path
+    if not path.exists():
+        return path
+    for index in range(2, 1000):
+        candidate = path.with_name(f"{path.stem}-{index}{path.suffix}")
+        if not candidate.exists():
+            return candidate
+    raise RuntimeError(f"Could not find an available path for {path}")
+
+
+def sync_pdf_filename(item: dict, pdf_path: Path | None = None) -> dict:
+    metadata = item.setdefault("metadata", {})
+    source_value = str(pdf_path or metadata.get("pdf_source") or "")
+    if not source_value:
+        return item
+    current = Path(source_value)
+    if not current.exists() or current.suffix.lower() != ".pdf":
+        return item
+    item = sync_human_annotation_from_pdf_name(item, current)
+    preferred = unique_path(preferred_pdf_path_for_item(item, current), current=current)
+    if current != preferred:
+        preferred.parent.mkdir(parents=True, exist_ok=True)
+        current.rename(preferred)
+        metadata["pdf_source_original_name"] = current.name
+        metadata["pdf_renamed_at"] = now_iso()
+    metadata["pdf_source"] = str(preferred)
+    return item
 
 
 def sync_note_filename(item: dict) -> dict:
@@ -1377,14 +1945,13 @@ def sync_note_filename(item: dict) -> dict:
     if current == preferred:
         return item
     preferred.parent.mkdir(parents=True, exist_ok=True)
-    if preferred.exists():
-        preferred = preferred.with_name(f"{preferred.stem}-{item['id']}{preferred.suffix}")
+    preferred = unique_path(preferred, current=current)
     current.rename(preferred)
     item["note_path"] = str(preferred)
     return item
 
 
-def write_item_note(item: dict, note: str, pdf_path: Path, model: str, provider: str = "kimi", reading_status: str = "full-text parsed") -> Path:
+def write_item_note(item: dict, note: str, pdf_path: Path, model: str, provider: str = "kimi", reading_status: str = "model_parsed_pdf") -> Path:
     path = preferred_note_path_for_item(item)
     path.parent.mkdir(parents=True, exist_ok=True)
     provenance = [
