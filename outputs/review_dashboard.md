@@ -105,11 +105,11 @@
 - **ASTM F3411 Standard Specification for Remote ID and Tracking** [ASTM International](https://store.astm.org/f3411-19.html)；数据库：社会数据库；类型：标准 (`standard`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`catalog_or_paywalled`；metadata_status：`auto`
 - **3GPP UAS Connectivity, Identification and Tracking Work Item** [3GPP](https://www.3gpp.org/DynaReport/WiVsSpec--820011.htm)；数据库：社会数据库；类型：标准 (`standard`)；主主题：`dynamic_directional_networking`；topics：`dynamic_directional_networking`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`catalog_or_paywalled`；metadata_status：`auto`
 - **3GPP NR Support for UAVs** [3GPP](https://www.3gpp.org/technologies/nr-uav)；数据库：社会数据库；类型：标准 (`standard`)；主主题：`dynamic_directional_networking`；topics：`dynamic_directional_networking`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`needs_document_search`；metadata_status：`auto`
-- **NASA UAS Traffic Management Project** [NASA](https://www.nasa.gov/utm)；数据库：社会数据库；类型：报告 (`report`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`landing_page`；metadata_status：`auto`
-- **FAA Unmanned Aircraft System Traffic Management** [FAA](https://www.faa.gov/uas/advanced_operations/traffic_management)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`landing_page`；metadata_status：`auto`
-- **FAA Remote Identification of Drones** [FAA](https://www.faa.gov/uas/getting_started/remote_id/)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`html_fulltext`；metadata_status：`auto`
-- **EASA U-space** [EASA](https://www.easa.europa.eu/en/domains/air-traffic-management/u-space)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`landing_page`；metadata_status：`auto`
-- **CAAC Minimum Performance Requirements for Operation Identification of Civil Micro, Light and Small UAVs** [CAAC](https://www.caac.gov.cn/English/News/202403/t20240305_223119.html)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`news_or_portal`；metadata_status：`auto`
+- **NASA UAS Traffic Management Project** [NASA](https://www.nasa.gov/utm)；数据库：社会数据库；类型：报告 (`report`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`kept`；process_status：`unread`；文档可用性：`landing_page`；metadata_status：`auto`
+- **FAA Unmanned Aircraft System Traffic Management** [FAA](https://www.faa.gov/uas/advanced_operations/traffic_management)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`kept`；process_status：`unread`；文档可用性：`landing_page`；metadata_status：`auto`
+- **FAA Remote Identification of Drones** [FAA](https://www.faa.gov/uas/getting_started/remote_id/)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`kept`；process_status：`unread`；文档可用性：`html_fulltext`；metadata_status：`auto`
+- **EASA U-space** [EASA](https://www.easa.europa.eu/en/domains/air-traffic-management/u-space)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`kept`；process_status：`unread`；文档可用性：`landing_page`；metadata_status：`auto`
+- **CAAC Minimum Performance Requirements for Operation Identification of Civil Micro, Light and Small UAVs** [CAAC](https://www.caac.gov.cn/English/News/202403/t20240305_223119.html)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`kept`；process_status：`unread`；文档可用性：`news_or_portal`；metadata_status：`auto`
 - **CAAC General Aviation and Low-Altitude Economy Steering Group** [CAAC](https://www.caac.gov.cn/English/News/202507/t20250709_227896.html)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`dtmb_uav_control`；topics：`dtmb_uav_control`；相关性：3；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`news_or_portal`；metadata_status：`auto`
 
 ## 社会数据库文档可用性
@@ -120,13 +120,13 @@
 
 ### html_fulltext
 
-- **FAA Remote Identification of Drones** [FAA](https://www.faa.gov/uas/getting_started/remote_id/)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`html_fulltext`；metadata_status：`auto`
+- **FAA Remote Identification of Drones** [FAA](https://www.faa.gov/uas/getting_started/remote_id/)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`kept`；process_status：`unread`；文档可用性：`html_fulltext`；metadata_status：`auto`
 
 ### landing_page
 
-- **NASA UAS Traffic Management Project** [NASA](https://www.nasa.gov/utm)；数据库：社会数据库；类型：报告 (`report`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`landing_page`；metadata_status：`auto`
-- **FAA Unmanned Aircraft System Traffic Management** [FAA](https://www.faa.gov/uas/advanced_operations/traffic_management)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`landing_page`；metadata_status：`auto`
-- **EASA U-space** [EASA](https://www.easa.europa.eu/en/domains/air-traffic-management/u-space)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`landing_page`；metadata_status：`auto`
+- **NASA UAS Traffic Management Project** [NASA](https://www.nasa.gov/utm)；数据库：社会数据库；类型：报告 (`report`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`kept`；process_status：`unread`；文档可用性：`landing_page`；metadata_status：`auto`
+- **FAA Unmanned Aircraft System Traffic Management** [FAA](https://www.faa.gov/uas/advanced_operations/traffic_management)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`kept`；process_status：`unread`；文档可用性：`landing_page`；metadata_status：`auto`
+- **EASA U-space** [EASA](https://www.easa.europa.eu/en/domains/air-traffic-management/u-space)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`kept`；process_status：`unread`；文档可用性：`landing_page`；metadata_status：`auto`
 
 ### catalog_or_paywalled
 
@@ -135,7 +135,7 @@
 
 ### news_or_portal
 
-- **CAAC Minimum Performance Requirements for Operation Identification of Civil Micro, Light and Small UAVs** [CAAC](https://www.caac.gov.cn/English/News/202403/t20240305_223119.html)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`news_or_portal`；metadata_status：`auto`
+- **CAAC Minimum Performance Requirements for Operation Identification of Civil Micro, Light and Small UAVs** [CAAC](https://www.caac.gov.cn/English/News/202403/t20240305_223119.html)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`kept`；process_status：`unread`；文档可用性：`news_or_portal`；metadata_status：`auto`
 - **CAAC General Aviation and Low-Altitude Economy Steering Group** [CAAC](https://www.caac.gov.cn/English/News/202507/t20250709_227896.html)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`dtmb_uav_control`；topics：`dtmb_uav_control`；相关性：3；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`news_or_portal`；metadata_status：`auto`
 
 ### needs_document_search
@@ -146,11 +146,6 @@
 
 ### new
 
-- **NASA UAS Traffic Management Project** [NASA](https://www.nasa.gov/utm)；数据库：社会数据库；类型：报告 (`report`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`landing_page`；metadata_status：`auto`
-- **FAA Unmanned Aircraft System Traffic Management** [FAA](https://www.faa.gov/uas/advanced_operations/traffic_management)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`landing_page`；metadata_status：`auto`
-- **FAA Remote Identification of Drones** [FAA](https://www.faa.gov/uas/getting_started/remote_id/)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`html_fulltext`；metadata_status：`auto`
-- **EASA U-space** [EASA](https://www.easa.europa.eu/en/domains/air-traffic-management/u-space)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`landing_page`；metadata_status：`auto`
-- **CAAC Minimum Performance Requirements for Operation Identification of Civil Micro, Light and Small UAVs** [CAAC](https://www.caac.gov.cn/English/News/202403/t20240305_223119.html)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`news_or_portal`；metadata_status：`auto`
 - **ASTM F3411 Standard Specification for Remote ID and Tracking** [ASTM International](https://store.astm.org/f3411-19.html)；数据库：社会数据库；类型：标准 (`standard`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`catalog_or_paywalled`；metadata_status：`auto`
 - **3GPP UAS Connectivity, Identification and Tracking Work Item** [3GPP](https://www.3gpp.org/DynaReport/WiVsSpec--820011.htm)；数据库：社会数据库；类型：标准 (`standard`)；主主题：`dynamic_directional_networking`；topics：`dynamic_directional_networking`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`catalog_or_paywalled`；metadata_status：`auto`
 - **3GPP NR Support for UAVs** [3GPP](https://www.3gpp.org/technologies/nr-uav)；数据库：社会数据库；类型：标准 (`standard`)；主主题：`dynamic_directional_networking`；topics：`dynamic_directional_networking`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`needs_document_search`；metadata_status：`auto`
@@ -158,7 +153,11 @@
 
 ### kept
 
-暂无。
+- **NASA UAS Traffic Management Project** [NASA](https://www.nasa.gov/utm)；数据库：社会数据库；类型：报告 (`report`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`kept`；process_status：`unread`；文档可用性：`landing_page`；metadata_status：`auto`
+- **FAA Unmanned Aircraft System Traffic Management** [FAA](https://www.faa.gov/uas/advanced_operations/traffic_management)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`kept`；process_status：`unread`；文档可用性：`landing_page`；metadata_status：`auto`
+- **FAA Remote Identification of Drones** [FAA](https://www.faa.gov/uas/getting_started/remote_id/)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`kept`；process_status：`unread`；文档可用性：`html_fulltext`；metadata_status：`auto`
+- **EASA U-space** [EASA](https://www.easa.europa.eu/en/domains/air-traffic-management/u-space)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`kept`；process_status：`unread`；文档可用性：`landing_page`；metadata_status：`auto`
+- **CAAC Minimum Performance Requirements for Operation Identification of Civil Micro, Light and Small UAVs** [CAAC](https://www.caac.gov.cn/English/News/202403/t20240305_223119.html)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`kept`；process_status：`unread`；文档可用性：`news_or_portal`；metadata_status：`auto`
 
 ### downloaded
 
@@ -186,11 +185,11 @@
 
 ### unread
 
-- **NASA UAS Traffic Management Project** [NASA](https://www.nasa.gov/utm)；数据库：社会数据库；类型：报告 (`report`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`landing_page`；metadata_status：`auto`
-- **FAA Unmanned Aircraft System Traffic Management** [FAA](https://www.faa.gov/uas/advanced_operations/traffic_management)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`landing_page`；metadata_status：`auto`
-- **FAA Remote Identification of Drones** [FAA](https://www.faa.gov/uas/getting_started/remote_id/)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`html_fulltext`；metadata_status：`auto`
-- **EASA U-space** [EASA](https://www.easa.europa.eu/en/domains/air-traffic-management/u-space)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`landing_page`；metadata_status：`auto`
-- **CAAC Minimum Performance Requirements for Operation Identification of Civil Micro, Light and Small UAVs** [CAAC](https://www.caac.gov.cn/English/News/202403/t20240305_223119.html)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`news_or_portal`；metadata_status：`auto`
+- **NASA UAS Traffic Management Project** [NASA](https://www.nasa.gov/utm)；数据库：社会数据库；类型：报告 (`report`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`kept`；process_status：`unread`；文档可用性：`landing_page`；metadata_status：`auto`
+- **FAA Unmanned Aircraft System Traffic Management** [FAA](https://www.faa.gov/uas/advanced_operations/traffic_management)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`kept`；process_status：`unread`；文档可用性：`landing_page`；metadata_status：`auto`
+- **FAA Remote Identification of Drones** [FAA](https://www.faa.gov/uas/getting_started/remote_id/)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`kept`；process_status：`unread`；文档可用性：`html_fulltext`；metadata_status：`auto`
+- **EASA U-space** [EASA](https://www.easa.europa.eu/en/domains/air-traffic-management/u-space)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`kept`；process_status：`unread`；文档可用性：`landing_page`；metadata_status：`auto`
+- **CAAC Minimum Performance Requirements for Operation Identification of Civil Micro, Light and Small UAVs** [CAAC](https://www.caac.gov.cn/English/News/202403/t20240305_223119.html)；数据库：社会数据库；类型：政策 (`policy`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`kept`；process_status：`unread`；文档可用性：`news_or_portal`；metadata_status：`auto`
 - **ASTM F3411 Standard Specification for Remote ID and Tracking** [ASTM International](https://store.astm.org/f3411-19.html)；数据库：社会数据库；类型：标准 (`standard`)；主主题：`remote_id_broadcast_capacity`；topics：`remote_id_broadcast_capacity`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`catalog_or_paywalled`；metadata_status：`auto`
 - **3GPP UAS Connectivity, Identification and Tracking Work Item** [3GPP](https://www.3gpp.org/DynaReport/WiVsSpec--820011.htm)；数据库：社会数据库；类型：标准 (`standard`)；主主题：`dynamic_directional_networking`；topics：`dynamic_directional_networking`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`catalog_or_paywalled`；metadata_status：`auto`
 - **3GPP NR Support for UAVs** [3GPP](https://www.3gpp.org/technologies/nr-uav)；数据库：社会数据库；类型：标准 (`standard`)；主主题：`dynamic_directional_networking`；topics：`dynamic_directional_networking`；相关性：4；权威性：5；review_status：`new`；process_status：`unread`；文档可用性：`needs_document_search`；metadata_status：`auto`

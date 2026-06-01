@@ -1,6 +1,6 @@
 # Low-Altitude Research Intelligence Hub
 
-这是一个轻量级低空研究情报助手，不是完整知识管理平台，也不是 Level 1 实现仓库。
+这是一个轻量级低空研究情报助手。
 
 核心目标：
 
