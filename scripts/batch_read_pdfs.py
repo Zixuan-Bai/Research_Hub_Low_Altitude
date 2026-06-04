@@ -80,8 +80,14 @@ def main() -> int:
     failures = 0
     for pdf_path, topic, _score, topic_reason in planned:
         try:
-            item, confidence, match_reason = hub.prepare_pdf_item(pdf_path, topic, providers, args.lookup_limit)
+            registered = hub.find_registered_pdf_item(pdf_path)
+            if registered:
+                item = registered
+            else:
+                item = hub.register_pdf_item(pdf_path, topic=topic, providers=providers, lookup_limit=args.lookup_limit, config=config)
             item.setdefault("metadata", {})["topic_inference_reason"] = topic_reason
+            confidence = float((item.get("metadata") or {}).get("metadata_match_confidence") or 0.0)
+            match_reason = str((item.get("metadata") or {}).get("metadata_match_reason") or "registered PDF item")
             if mode == "metadata-only":
                 item, note_path, model = hub.read_pdf_metadata_only(pdf_path, item)
             elif mode == "text-draft":

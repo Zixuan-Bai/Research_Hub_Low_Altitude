@@ -22,6 +22,8 @@ def main() -> int:
         default="auto",
         help="Reading mode. auto uses kimi only when a Kimi/Moonshot API key is present; otherwise text-draft.",
     )
+    parser.add_argument("--force", action="store_true", help="Regenerate a note even when one already exists.")
+    parser.add_argument("--upgrade", action="store_true", help="Upgrade an existing text-draft note to Kimi when --mode kimi is selected.")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be read without API calls or writes.")
     args = parser.parse_args()
 
@@ -34,25 +36,43 @@ def main() -> int:
     config = hub.load_config(Path(args.config))
     topic, topic_score, topic_reason = hub.resolve_topic_for_pdf(pdf_path, args.topic, config)
     providers = [provider.strip() for provider in args.providers.split(",") if provider.strip()]
-    existing = hub.find_existing_note_for_pdf(pdf_path)
-    if existing:
-        if args.dry_run:
-            print(f"Existing note found, would skip: {existing.get('note_path')}")
-            print(f"PDF path: {pdf_path}")
-            return 0
-        synced = hub.sync_existing_item_for_pdf(pdf_path, existing)
-        print(f"Existing note found, synced names, skipping: {synced.get('note_path')}")
-        print(f"PDF path: {(synced.get('metadata') or {}).get('pdf_source', pdf_path)}")
-        return 0
-
-    item, confidence, reason = hub.prepare_pdf_item(pdf_path, topic, providers, args.lookup_limit)
-    item.setdefault("metadata", {})["topic_inference_reason"] = topic_reason
     mode = args.mode
     if mode == "auto":
         mode = "kimi" if hub.has_kimi_api_key(config) else "text-draft"
 
+    existing = hub.find_existing_note_for_pdf(pdf_path)
+    if existing and not args.force:
+        existing_mode = str((existing.get("metadata") or {}).get("reading_mode") or "")
+        can_upgrade = args.upgrade and existing_mode == "text-draft" and mode == "kimi"
+        if not can_upgrade:
+            if args.dry_run:
+                print(f"Existing note found, would skip: {existing.get('note_path')}")
+                print(f"PDF path: {pdf_path}")
+                return 0
+            synced = hub.sync_existing_item_for_pdf(pdf_path, existing)
+            print(f"Existing note found, synced names, skipping: {synced.get('note_path')}")
+            print(f"PDF path: {(synced.get('metadata') or {}).get('pdf_source', pdf_path)}")
+            print("Use --force to overwrite, or --upgrade --mode kimi to upgrade a text-draft note.")
+            return 0
+
+    registered = hub.find_registered_pdf_item(pdf_path)
+    if registered:
+        item = registered
+        confidence = float((item.get("metadata") or {}).get("metadata_match_confidence") or 1.0)
+        reason = str((item.get("metadata") or {}).get("metadata_match_reason") or "registered PDF item")
+    else:
+        if args.dry_run:
+            item, confidence, reason = hub.prepare_pdf_item(pdf_path, topic, providers, args.lookup_limit)
+        else:
+            item = hub.register_pdf_item(pdf_path, topic=topic, providers=providers, lookup_limit=args.lookup_limit, config=config)
+            confidence = float((item.get("metadata") or {}).get("metadata_match_confidence") or 0.0)
+            reason = str((item.get("metadata") or {}).get("metadata_match_reason") or "registered PDF item")
+
+    item.setdefault("metadata", {})["topic_inference_reason"] = topic_reason
+
     if args.dry_run:
-        print(f"Would read PDF: {pdf_path}")
+        action = "Would upgrade/read" if existing and (args.force or args.upgrade) else "Would read PDF"
+        print(f"{action}: {pdf_path}")
         print(f"Matched item: {item.get('title', '')}")
         print(f"Topic: {topic} ({topic_score:.2f}, {topic_reason})")
         print(f"Confidence: {confidence:.2f} ({reason})")
@@ -60,6 +80,10 @@ def main() -> int:
         print(f"Mode: {mode}")
         print(f"Output note: {hub.note_path_for_item(item)}")
         return 0
+
+    if existing and (args.force or args.upgrade):
+        existing_mode = str((existing.get("metadata") or {}).get("reading_mode") or "")
+        print(f"Regenerating existing note: {existing.get('note_path')} ({existing_mode or 'unknown'} -> {mode})")
 
     try:
         if mode == "metadata-only":

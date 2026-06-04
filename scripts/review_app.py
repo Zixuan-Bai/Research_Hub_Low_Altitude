@@ -12,7 +12,7 @@ import research_hub_lib as hub
 
 REVIEW_STATUS_OPTIONS = ["new", "kept", "downloaded", "rejected"]
 PROCESS_STATUS_OPTIONS = ["unread", "noted", "used_in_synthesis"]
-SOURCE_TYPE_OPTIONS = ["paper", "news", "standard", "policy", "whitepaper", "report", "industry"]
+SOURCE_TYPE_OPTIONS = ["paper", "news", "standard", "policy", "whitepaper", "report", "industry", "dataset"]
 SOURCE_TYPE_LABELS = {
     "paper": "论文",
     "standard": "标准",
@@ -21,6 +21,7 @@ SOURCE_TYPE_LABELS = {
     "report": "报告",
     "industry": "产业信号",
     "news": "新闻/动态",
+    "dataset": "数据集",
 }
 CONTEXT_SOURCE_TYPES = {"news", "standard", "policy", "whitepaper", "report", "industry"}
 METADATA_STATUS_LABELS = {
@@ -93,17 +94,40 @@ def local_pdf_path(item: dict) -> Path | None:
     return path if path.exists() and path.suffix.lower() == ".pdf" else None
 
 
-def read_item_from_gui(item: dict, mode: str) -> tuple[int, str]:
+def bind_pdf_to_item(item_id: str, pdf_path_value: str) -> bool:
+    pdf_path = Path(pdf_path_value)
+    if not pdf_path.exists() or pdf_path.suffix.lower() != ".pdf":
+        return False
+    for item in hub.load_items():
+        if item.get("id") != item_id:
+            continue
+        metadata = item.setdefault("metadata", {})
+        metadata["pdf_source"] = str(pdf_path)
+        metadata["pdf_sha256"] = hub.sha256_file(pdf_path)
+        metadata["pdf_fingerprint"] = metadata["pdf_sha256"]
+        metadata["pdf_inbox_status"] = "registered"
+        tags = set(item.get("tags") or [])
+        tags.add("local-pdf")
+        item["tags"] = sorted(tags)
+        hub.update_item(item, apply_note_backfill=False)
+        hub.write_review_dashboard(hub.load_items())
+        return True
+    return False
+
+
+def read_item_from_gui(item: dict, mode: str, force: bool = False, upgrade: bool = False) -> tuple[int, str]:
     pdf_path = local_pdf_path(item)
     if not pdf_path:
         return 1, "没有找到本地 PDF。请先把 PDF 放入 literature/inbox/papers，或在 metadata 中补充 pdf_source。"
     topic = str(item.get("topic") or "auto")
     if topic == hub.NEEDS_TOPIC_REVIEW:
         topic = "auto"
-    return run_script(
-        ["scripts/read_item.py", str(pdf_path), "--topic", topic, "--mode", mode],
-        timeout=7200,
-    )
+    args = ["scripts/read_item.py", str(pdf_path), "--topic", topic, "--mode", mode]
+    if force:
+        args.append("--force")
+    if upgrade:
+        args.append("--upgrade")
+    return run_script(args, timeout=7200)
 
 
 def update_review_status(item_id: str, status: str) -> None:
@@ -297,7 +321,93 @@ def has_existing_note(item: dict) -> bool:
     return bool(note_path_value and Path(str(note_path_value)).exists())
 
 
+def possible_matching_pdfs(item: dict, limit: int = 8) -> list[Path]:
+    title_tokens = hub.token_set(str(item.get("title") or ""))
+    rows: list[tuple[float, Path]] = []
+    for pdf_path in hub.discover_pdf_inbox():
+        score = hub.title_similarity(str(item.get("title") or ""), pdf_path.stem)
+        if title_tokens and title_tokens & hub.token_set(pdf_path.stem):
+            score = max(score, 0.4)
+        rows.append((score, pdf_path))
+    return [path for score, path in sorted(rows, reverse=True)[:limit] if score >= 0.15]
+
+
+def render_pdf_actions(st, item: dict, item_key: str, title: str) -> None:
+    pdf_path = local_pdf_path(item)
+    metadata = item.get("metadata") or {}
+    reading_mode = str(metadata.get("reading_mode") or "")
+    note_exists = has_existing_note(item)
+    with st.expander("本地 PDF / note 操作", expanded=False):
+        if pdf_path:
+            st.caption(f"PDF: `{pdf_path}`")
+        else:
+            st.caption("未绑定本地 PDF。可以手动输入路径，或从 inbox 候选 PDF 中选择。")
+            candidates = possible_matching_pdfs(item)
+            candidate_labels = [""] + [str(path) for path in candidates]
+            selected = st.selectbox("可能匹配的 inbox PDF", candidate_labels, key=f"{item_key}:pdf-candidate")
+            manual = st.text_input("本地 PDF 路径", value=selected, key=f"{item_key}:pdf-bind-path")
+            if st.button("绑定 PDF", key=f"{item_key}:pdf-bind", disabled=not manual.strip()):
+                if bind_pdf_to_item(item["id"], manual.strip()):
+                    st.session_state["last_action_message"] = f"已绑定 PDF：{title}"
+                    rerun(st)
+                else:
+                    st.error("绑定失败：路径不存在或不是 PDF。")
+            return
+
+        if not note_exists:
+            read_mode = st.selectbox("读取模式", ["metadata-only", "text-draft", "kimi"], key=f"{item_key}:read-mode")
+            if st.button("生成 note / 同步 metadata", key=f"{item_key}:read-now"):
+                with st.spinner("正在读取 PDF 并更新 item store..."):
+                    code, output = read_item_from_gui(item, read_mode)
+                st.code(output or "(no output)", language="text")
+                if code == 0:
+                    st.session_state["last_action_message"] = f"已处理：{title}"
+                    rerun(st)
+                else:
+                    st.error(f"读取失败，退出码 {code}")
+            return
+
+        st.caption(f"已有 note，reading_mode=`{reading_mode or 'unknown'}`。")
+        if reading_mode == "text-draft":
+            columns = st.columns(2)
+            if columns[0].button("升级为 Kimi note", key=f"{item_key}:upgrade-kimi"):
+                with st.spinner("正在升级为 Kimi note..."):
+                    code, output = read_item_from_gui(item, "kimi", upgrade=True)
+                st.code(output or "(no output)", language="text")
+                if code == 0:
+                    st.session_state["last_action_message"] = f"已升级：{title}"
+                    rerun(st)
+                else:
+                    st.error(f"升级失败，退出码 {code}")
+            confirm_text = columns[1].checkbox("确认覆盖 text-draft", key=f"{item_key}:force-text-confirm")
+            if columns[1].button("重新生成 text-draft", key=f"{item_key}:force-text", disabled=not confirm_text):
+                with st.spinner("正在重新生成 text-draft..."):
+                    code, output = read_item_from_gui(item, "text-draft", force=True)
+                st.code(output or "(no output)", language="text")
+                if code == 0:
+                    rerun(st)
+                else:
+                    st.error(f"重读失败，退出码 {code}")
+        else:
+            confirm = st.checkbox("确认覆盖已有 note", key=f"{item_key}:force-confirm")
+            mode = st.selectbox("重读模式", ["kimi", "text-draft", "metadata-only"], key=f"{item_key}:force-mode")
+            if st.button("重读 / 覆盖 note", key=f"{item_key}:force-read", disabled=not confirm):
+                with st.spinner("正在重读 PDF..."):
+                    code, output = read_item_from_gui(item, mode, force=True)
+                st.code(output or "(no output)", language="text")
+                if code == 0:
+                    st.session_state["last_action_message"] = f"已重读：{title}"
+                    rerun(st)
+                else:
+                    st.error(f"重读失败，退出码 {code}")
+
+
 def review_completed(item: dict) -> bool:
+    source_type = str(item.get("source_type") or "")
+    if source_type in CONTEXT_SOURCE_TYPES and hub.review_status(item) == "kept":
+        access, _reason = hub.infer_document_access(item)
+        if access in hub.REFERENCE_ONLY_DOCUMENT_ACCESS:
+            return True
     return hub.metadata_status(item) == "verified" and has_existing_note(item)
 
 
@@ -397,40 +507,8 @@ def render_item(st, item: dict, key_prefix: str) -> None:
             st.code(str(item["note_path"]), language="text")
             render_note_preview(st, str(item["note_path"]))
 
-        if str(item.get("source_type") or "") == "paper" and not has_existing_note(item):
-            pdf_path = local_pdf_path(item)
-            with st.expander("读取本地 PDF 生成 note", expanded=False):
-                if pdf_path:
-                    st.caption(f"PDF: `{pdf_path}`")
-                else:
-                    st.caption("未找到本地 PDF；请先下载 PDF，或在 metadata 中补充 `pdf_source`。")
-                read_mode = st.selectbox("读取模式", ["auto", "text-draft", "kimi", "metadata-only"], key=f"{item_key}:read-mode")
-                disabled = pdf_path is None
-                if st.button("生成 / 同步 note", key=f"{item_key}:read-now", disabled=disabled):
-                    with st.spinner("正在读取 PDF 并更新 item store..."):
-                        code, output = read_item_from_gui(item, read_mode)
-                    st.code(output or "(no output)", language="text")
-                    if code == 0:
-                        st.session_state["last_action_message"] = f"已处理：{title}"
-                        rerun(st)
-                    else:
-                        st.error(f"读取失败，退出码 {code}")
-
-        follow_up_actions = list(metadata.get("follow_up_actions") or [])
-        if follow_up_actions:
-            open_count = sum(1 for action in follow_up_actions if action.get("status") == "open")
-            with st.expander(f"后续建议 ({open_count} open / {len(follow_up_actions)} total)", expanded=False):
-                for action_index, action in enumerate(follow_up_actions):
-                    st.markdown(f"- `{action.get('status', 'open')}` {action.get('text', '')}")
-                    action_columns = st.columns(3)
-                    for action_status, column in zip(["open", "done", "skipped"], action_columns):
-                        if column.button(
-                            action_status,
-                            key=f"{item_key}:follow-up:{action_index}:{action.get('id')}:{action_status}",
-                            disabled=action.get("status") == action_status,
-                        ):
-                            update_follow_up_action_status(item["id"], str(action.get("id")), action_status)
-                            rerun(st)
+        if str(item.get("source_type") or "") == "paper":
+            render_pdf_actions(st, item, item_key, title)
 
         with st.expander("编辑 metadata", expanded=False):
             with st.form(key=f"{item_key}:metadata-form"):
@@ -730,6 +808,26 @@ def render_topic_workspace_tab(st, items: list[dict]) -> None:
     )
 
     path = hub.topic_workspace_path(selected_topic)
+    columns = st.columns([1.2, 1.2, 3.0])
+    if columns[0].button("Extract related items from notes", key="topic-preview-extract"):
+        extracted = hub.extract_related_items_from_notes(items, topic=selected_topic)
+        if extracted:
+            all_items, changed = hub.upsert_items(extracted)
+            hub.write_review_dashboard(all_items)
+            st.session_state["last_action_message"] = f"已抽取/更新 {len(changed)} 个推荐来源条目。"
+        else:
+            st.session_state["last_action_message"] = "没有发现可入库的具体推荐来源。"
+        rerun(st)
+    if columns[1].button("Refresh topic preview", key="topic-preview-refresh"):
+        path = hub.write_topic_workspace(selected_topic, items, overwrite=True)
+        st.session_state["last_action_message"] = f"Topic Preview 已刷新：{path.as_posix()}"
+        rerun(st)
+    columns[2].code(path.as_posix(), language="text")
+
+    workspace_text = hub.build_topic_workspace(selected_topic, items)
+    st.markdown(workspace_text)
+    return
+
     columns = st.columns([1.0, 1.0, 3.0])
     overwrite = columns[0].checkbox("覆盖已有草稿", value=False, key="workspace-overwrite")
     if columns[1].button("生成 / 刷新 workspace", key="workspace-generate"):
@@ -840,6 +938,76 @@ def render_batch_tab(st) -> None:
             st.error(f"批量读取结束但有失败，退出码 {code}")
 
 
+def render_pdf_inbox_tab(st, items: list[dict]) -> None:
+    st.subheader("PDF Inbox")
+    st.caption("扫描 `literature/inbox/papers/`。注册只创建可复核 item，不生成 note；读取操作会另行生成或升级 note。")
+    rows = hub.scan_pdf_inbox(items=items)
+    if not rows:
+        st.info("PDF inbox 暂无 PDF。")
+        return
+
+    st.dataframe(
+        [
+            {
+                "filename": row["filename"],
+                "registered": row["registered"],
+                "item_id": row["registered_item_id"],
+                "inferred_title": row["inferred_title"],
+                "topic": row["inferred_topic"],
+                "topic_confidence": row["topic_confidence"],
+                "has_note": row["has_note"],
+            }
+            for row in rows
+        ],
+        hide_index=True,
+        width="stretch",
+    )
+
+    providers = st.text_input("Metadata providers", "openalex,crossref,semantic_scholar", key="pdf-inbox-providers")
+    topic = st.selectbox("Topic", ["auto", *sorted(hub.topic_key_to_slug(hub.load_config()).keys())], key="pdf-inbox-topic")
+    provider_list = [provider.strip() for provider in providers.split(",") if provider.strip()]
+    for row in rows:
+        with st.container(border=True):
+            st.markdown(f"### {row['filename']}")
+            st.caption(f"`{row['path']}`")
+            st.write(
+                f"SHA256 `{row['sha256'][:16]}...` | inferred topic `{row['inferred_topic']}` "
+                f"({row['topic_confidence']}, {row['topic_reason']})"
+            )
+            if row["registered"]:
+                st.success(f"已注册：`{row['registered_item_id']}` {row['registered_title']}")
+                if row["note_path"]:
+                    st.code(row["note_path"], language="text")
+                continue
+
+            columns = st.columns(3)
+            if columns[0].button("Register only", key=f"pdf-inbox-register:{row['sha256']}"):
+                with st.spinner("正在注册 PDF item..."):
+                    item = hub.register_pdf_item(Path(row["path"]), topic=topic, providers=provider_list)
+                st.session_state["last_action_message"] = f"已注册 PDF：{item.get('title', row['filename'])}"
+                rerun(st)
+            if columns[1].button("Register + text-draft", key=f"pdf-inbox-text:{row['sha256']}"):
+                with st.spinner("正在注册并生成 text-draft..."):
+                    item = hub.register_pdf_item(Path(row["path"]), topic=topic, providers=provider_list)
+                    code, output = read_item_from_gui(item, "text-draft")
+                st.code(output or "(no output)", language="text")
+                if code == 0:
+                    st.session_state["last_action_message"] = f"已生成 text-draft：{item.get('title', row['filename'])}"
+                    rerun(st)
+                else:
+                    st.error(f"读取失败，退出码 {code}")
+            if columns[2].button("Register + Kimi note", key=f"pdf-inbox-kimi:{row['sha256']}"):
+                with st.spinner("正在注册并生成 Kimi note..."):
+                    item = hub.register_pdf_item(Path(row["path"]), topic=topic, providers=provider_list)
+                    code, output = read_item_from_gui(item, "kimi")
+                st.code(output or "(no output)", language="text")
+                if code == 0:
+                    st.session_state["last_action_message"] = f"已生成 Kimi note：{item.get('title', row['filename'])}"
+                    rerun(st)
+                else:
+                    st.error(f"读取失败，退出码 {code}")
+
+
 def render_topic_review_tab(st, items: list[dict]) -> None:
     pending = [item for item in items if item.get("topic") == hub.NEEDS_TOPIC_REVIEW]
     st.write(f"{len(pending)} items need topic review")
@@ -894,7 +1062,7 @@ def main() -> None:
             "query": st.text_input("Search"),
         }
 
-    tabs = st.tabs(["情报收集", "复核条目", "Topic 审核", "批量读 PDF", "Topic Overview", "Topic Workspace", "论文数据库", "社会数据库"])
+    tabs = st.tabs(["情报收集", "复核条目", "Topic 审核", "PDF Inbox", "批量读 PDF", "Topic Overview", "Topic Preview", "论文数据库", "社会数据库"])
     with tabs[0]:
         render_collect_tab(st)
     with tabs[1]:
@@ -902,14 +1070,16 @@ def main() -> None:
     with tabs[2]:
         render_topic_review_tab(st, items)
     with tabs[3]:
-        render_batch_tab(st)
+        render_pdf_inbox_tab(st, items)
     with tabs[4]:
-        render_topic_overview_tab(st, items)
+        render_batch_tab(st)
     with tabs[5]:
-        render_topic_workspace_tab(st, items)
+        render_topic_overview_tab(st, items)
     with tabs[6]:
-        render_paper_database_tab(st, items)
+        render_topic_workspace_tab(st, items)
     with tabs[7]:
+        render_paper_database_tab(st, items)
+    with tabs[8]:
         render_context_database_tab(st, items)
 
 
