@@ -593,35 +593,6 @@ def metadata_from_note(note: str) -> dict:
     return result
 
 
-def follow_up_actions_from_note(note: str, item_id_value: str, existing: list[dict] | None = None) -> list[dict]:
-    section = note_section(note, "后续建议") or note_section(note, "后续动作")
-    if not section:
-        return existing or []
-    existing_by_text = {normalize_space(str(action.get("text", ""))): action for action in existing or []}
-    actions: list[dict] = []
-    for raw_line in section.splitlines():
-        line = raw_line.strip()
-        if not line.startswith(("-", "*")):
-            continue
-        _evidence, text = strip_evidence_prefix(line.lstrip("-* "))
-        text = normalize_space(text)
-        if not text:
-            continue
-        previous = existing_by_text.get(text, {})
-        action_id = previous.get("id") or stable_id(item_id_value, text)[:10]
-        actions.append(
-            {
-                "id": action_id,
-                "text": text,
-                "status": previous.get("status") or "open",
-                "source": previous.get("source") or "note",
-                "created_at": previous.get("created_at") or now_iso(),
-                "completed_at": previous.get("completed_at") or "",
-            }
-        )
-    return actions
-
-
 def should_replace_with_note_metadata(item: dict, field: str, value: str) -> bool:
     if not value:
         return False
@@ -667,15 +638,6 @@ def apply_note_metadata(item: dict, note: str) -> dict:
         metadata["llm_metadata_extracted_at"] = now_iso()
         metadata["llm_metadata_needs_review"] = True
         item["metadata_status"] = "needs_review"
-    return item
-
-
-def apply_note_follow_up_actions(item: dict, note: str) -> dict:
-    metadata = item.setdefault("metadata", {})
-    existing = list(metadata.get("follow_up_actions") or [])
-    actions = follow_up_actions_from_note(note, str(item.get("id") or ""), existing)
-    if actions:
-        metadata["follow_up_actions"] = actions
     return item
 
 
@@ -854,6 +816,63 @@ def extract_related_items_from_notes(items: list[dict], topic: str = "all", note
     for item in selected:
         related.extend(extract_related_items_from_note_item(item))
     return dedupe_items(related)
+
+
+def enrich_related_paper_metadata(items: list[dict], providers: list[str], lookup_limit: int = 3) -> list[dict]:
+    enriched: list[dict] = []
+    for item in items:
+        if str(item.get("source_type") or "") != "paper":
+            enriched.append(item)
+            continue
+        metadata = item.setdefault("metadata", {})
+        query = str(metadata.get("doi") or item.get("title") or "").strip()
+        if not query:
+            enriched.append(item)
+            continue
+        candidates: list[dict] = []
+        for provider in providers:
+            searcher = SEARCHERS.get(provider)
+            if not searcher:
+                continue
+            try:
+                candidates.extend(searcher(query, str(item.get("topic") or NEEDS_TOPIC_REVIEW), lookup_limit))
+            except Exception:
+                continue
+        if not candidates:
+            metadata.setdefault("metadata_lookup_status", "no_match")
+            enriched.append(item)
+            continue
+
+        doi = str(metadata.get("doi") or "").lower().strip()
+        best = None
+        match_reason = ""
+        if doi:
+            best = next((candidate for candidate in candidates if str((candidate.get("metadata") or {}).get("doi") or "").lower().strip() == doi), None)
+            if best:
+                match_reason = "doi"
+        if best is None:
+            best = max(candidates, key=lambda candidate: title_similarity(str(item.get("title") or ""), str(candidate.get("title") or "")))
+            score = title_similarity(str(item.get("title") or ""), str(best.get("title") or ""))
+            if score < 0.86:
+                metadata["metadata_lookup_status"] = "low_confidence_no_update"
+                metadata["metadata_lookup_best_title"] = best.get("title", "")
+                metadata["metadata_lookup_title_similarity"] = round(score, 3)
+                enriched.append(item)
+                continue
+            match_reason = f"title_similarity:{score:.3f}"
+
+        best_metadata = dict(best.get("metadata") or {})
+        for key in ["authors", "year", "venue", "publisher", "doi", "provider"]:
+            if best_metadata.get(key) and not metadata.get(key):
+                metadata[key] = best_metadata[key]
+        for field in ["url", "date", "abstract_or_snippet", "pdf_url"]:
+            if best.get(field) and not item.get(field):
+                item[field] = best[field]
+        metadata["metadata_lookup_status"] = "matched"
+        metadata["metadata_lookup_reason"] = match_reason
+        item["metadata_status"] = "needs_review"
+        enriched.append(sync_status_fields(item))
+    return enriched
 
 
 def backfill_metadata_from_item_note(item: dict) -> dict:
@@ -1206,7 +1225,7 @@ def register_pdf_item(
     item["source"] = "local_pdf"
     item["source_type"] = "paper"
     item["review_status"] = "new"
-    item["process_status"] = process_status(item)
+    item["process_status"] = "unread"
     metadata = item.setdefault("metadata", {})
     metadata["pdf_source"] = str(pdf_path)
     metadata["pdf_sha256"] = sha256_file(pdf_path)
@@ -1260,14 +1279,17 @@ def apply_reading_mode_history(item: dict, new_mode: str) -> dict:
     metadata = item.setdefault("metadata", {})
     previous_mode = str(metadata.get("reading_mode") or "")
     previous_version = int(metadata.get("note_version") or (1 if item.get("note_path") else 0))
+    had_note = bool(item.get("note_path"))
     if previous_mode and previous_mode != new_mode:
         metadata["previous_reading_mode"] = previous_mode
         metadata["upgraded_at"] = now_iso()
         history = list(metadata.get("reading_upgrade_history") or [])
         history.append({"from": previous_mode, "to": new_mode, "at": metadata["upgraded_at"]})
         metadata["reading_upgrade_history"] = history[-10:]
+    elif had_note:
+        metadata["overwritten_at"] = now_iso()
     metadata["reading_mode"] = new_mode
-    metadata["note_version"] = previous_version + 1 if item.get("note_path") else max(previous_version, 1)
+    metadata["note_version"] = previous_version + 1 if had_note else max(previous_version, 1)
     return item
 
 
@@ -1757,68 +1779,6 @@ def build_topic_workspace(topic: str, items: list[dict]) -> str:
         "",
     ]
     return "\n".join(lines)
-    open_actions = [
-        (item, action)
-        for item in rows
-        for action in (item.get("metadata") or {}).get("follow_up_actions") or []
-        if action.get("status") == "open"
-    ]
-    lines = [
-        f"# Topic Research Workspace: {topic}",
-        "",
-        f"- updated_at: {now_iso()}",
-        f"- item_count: {len(rows)}",
-        f"- noted_count: {len(noted)}",
-        f"- context_signal_count: {len(context_rows)}",
-        "",
-        "> needs-review: 本页是人机共同维护的研究讨论草稿，不是最终研究结论、novelty claim 或路线卡。",
-        "",
-        "## 证据基底",
-        "",
-    ]
-    if noted:
-        for item in sorted(noted, key=lambda row: str(row.get("date") or ""), reverse=True):
-            lines.append(item_line(item))
-    else:
-        lines.append("- needs-review: 该 topic 还没有已生成 note 的条目。")
-    lines += ["", "## 社会数据库线索", ""]
-    if context_rows:
-        for item in sorted(context_rows, key=lambda row: (str((row.get("metadata") or {}).get("document_access") or ""), str(row.get("title") or ""))):
-            lines.append(item_line(item))
-    else:
-        lines.append("- needs-review: 暂无标准、政策、报告、白皮书或产业线索。")
-    lines += [
-        "",
-        "## 当前认识",
-        "",
-        "- paper-supported: needs-review",
-        "- inferred: needs-review",
-        "- unsupported: needs-review",
-        "",
-        "## 不确定信息",
-        "",
-    ]
-    if open_actions:
-        for item, action in open_actions[:30]:
-            lines.append(f"- needs-review: **{item.get('title', '未命名条目')}**：{action.get('text', '')}")
-    else:
-        lines.append("- needs-review: 尚未从 note 中积累明确的后续核验项。")
-    lines += [
-        "",
-        "## 可能论文 idea（问题形式）",
-        "",
-        "- proposal: needs-review",
-        "",
-        "## 推荐下一步阅读 / 检索",
-        "",
-        "- needs-review: 优先补齐直接 PDF/报告/标准原文，再讨论 gap。",
-        "",
-        "## 讨论记录",
-        "",
-        "- needs-review: 在 Streamlit Topic Workspace 中追加你和 LLM 的讨论结论；保留证据标签。",
-        "",
-    ]
-    return "\n".join(lines)
 
 
 def build_topic_workspace_prompt(topic: str, items: list[dict], workspace_text: str, max_notes: int = 8) -> str:
@@ -1893,16 +1853,10 @@ def write_review_dashboard(items: list[dict], path: Path = Path("outputs/review_
     else:
         lines.append("暂无。")
     lines.append("")
-    open_actions = []
-    for item in items:
-        for action in (item.get("metadata") or {}).get("follow_up_actions") or []:
-            if action.get("status") == "open":
-                open_actions.append((item, action))
-    open_actions = []
-    lines += ["## 后续建议待处理", ""]
-    if open_actions:
-        for item, action in open_actions[:80]:
-            lines.append(f"- `{action.get('id', '')}` **{item.get('title', '未命名条目')}**：{action.get('text', '')}")
+    related_items = [item for item in items if str(item.get("source") or "") == "related_item_extraction"]
+    lines += ["## 推荐来源待复核", ""]
+    if related_items:
+        lines.extend(item_line(item) for item in sorted(related_items, key=lambda row: str(row.get("created_at") or ""), reverse=True)[:80])
     else:
         lines.append("暂无。")
     lines.append("")
@@ -2223,10 +2177,21 @@ PDF fingerprint: {fingerprint}
 ## 局限性
 ## 与低空研究的关联
 ## 可复用参数 / 模型 / 基线
-## 后续建议
+## 推荐入库条目
 ## 可靠性说明
 
-每个实质性 bullet 必须以 `paper-supported:`、`inferred:`、`proposal:` 或 `unsupported:` 开头。后续建议只能是继续阅读、核验参数、补充 metadata、查找政策/标准/产业背景等审查任务。
+每个实质性 bullet 必须以 `paper-supported:`、`inferred:`、`proposal:` 或 `unsupported:` 开头。
+
+`## 推荐入库条目` 只列出应进入 `data/items.jsonl` 的具体来源，不要写泛化任务、继续分析、核验假设或补充背景。每个条目使用下面结构：
+- type: paper / standard / policy / report / whitepaper / news / dataset / unknown
+- title_or_name:
+- doi_or_url_if_available:
+- reason:
+- relation_to_this_item:
+- confidence: high / medium / low
+
+如果没有具体来源，写：
+- needs-review: no concrete source identified.
 """
 
 
@@ -2328,8 +2293,8 @@ def build_text_draft_note(pdf_path: Path, item: dict, extracted_text: str, cache
 ## 可复用参数 / 模型 / 基线
 - needs-review: 尚未结构化提取。
 
-## 后续建议
-- proposal: 若该条目重要，使用 GUI 的复核条目读取按钮，或运行 `python scripts/read_item.py "{pdf_path}" --mode kimi` 生成精读笔记；默认会自动推断 topic，无法确认时进入 Topic 审核。
+## 推荐入库条目
+- needs-review: no concrete source identified.
 
 ## 可靠性说明
 - text_extracted

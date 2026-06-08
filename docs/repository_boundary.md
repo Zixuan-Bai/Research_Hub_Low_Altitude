@@ -6,9 +6,10 @@
 
 - `data/items.jsonl`
 - `data/manual_items.jsonl`
+- `data/research_atoms.jsonl`
 - `outputs/review_dashboard.md`
 - `notes/items/*.md`
-- `topics/<topic>/research_workspace.md`
+- `topics/<topic>/research_workspace.md`（Topic Preview 生成文件）
 - `topics/<topic>/synthesis.md`
 - `topics/<topic>/open_questions.md`
 - `topics/<topic>/possible_directions.md`
@@ -21,7 +22,7 @@
 - datasets、checkpoints、长实验日志；
 - Level 1 实现代码；
 - 未经人工复核的最终研究结论；
-- 自动生成的 novelty claim 或建仓建议。
+- 自动生成的 novelty claim、gap 结论、路线卡或建仓建议。
 
 本地 PDF 可以放在：
 

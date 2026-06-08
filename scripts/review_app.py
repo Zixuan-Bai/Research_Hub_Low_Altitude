@@ -228,22 +228,6 @@ def update_metadata(item_id: str, top_level: dict, metadata_updates: dict) -> No
         return
 
 
-def update_follow_up_action_status(item_id: str, action_id: str, status: str) -> None:
-    for item in hub.load_items():
-        if item.get("id") != item_id:
-            continue
-        metadata = item.setdefault("metadata", {})
-        actions = list(metadata.get("follow_up_actions") or [])
-        for action in actions:
-            if action.get("id") == action_id:
-                action["status"] = status
-                action["completed_at"] = hub.now_iso() if status in {"done", "skipped"} else ""
-        metadata["follow_up_actions"] = actions
-        hub.update_item(item, apply_note_backfill=False)
-        hub.write_review_dashboard(hub.load_items())
-        return
-
-
 def update_document_access(item_id: str, access: str) -> None:
     for item in hub.load_items():
         if item.get("id") != item_id:
@@ -827,57 +811,6 @@ def render_topic_workspace_tab(st, items: list[dict]) -> None:
     workspace_text = hub.build_topic_workspace(selected_topic, items)
     st.markdown(workspace_text)
     return
-
-    columns = st.columns([1.0, 1.0, 3.0])
-    overwrite = columns[0].checkbox("覆盖已有草稿", value=False, key="workspace-overwrite")
-    if columns[1].button("生成 / 刷新 workspace", key="workspace-generate"):
-        path = hub.write_topic_workspace(selected_topic, items, overwrite=overwrite)
-        st.session_state["last_action_message"] = f"Topic Workspace 已写入：{path.as_posix()}"
-        rerun(st)
-    columns[2].code(path.as_posix(), language="text")
-
-    if not path.exists():
-        st.info("还没有 workspace 文件。点击“生成 / 刷新 workspace”创建初始草稿。")
-        workspace_text = hub.build_topic_workspace(selected_topic, items)
-    else:
-        workspace_text = path.read_text(encoding="utf-8", errors="replace")
-
-    rows = [
-        {
-            "title": item.get("title", ""),
-            "source_type": item.get("source_type", ""),
-            "review": hub.review_status(item),
-            "process": hub.process_status(item),
-            "note": item.get("note_path", ""),
-            "document_access": hub.infer_document_access(item)[0] if str(item.get("source_type") or "") in CONTEXT_SOURCE_TYPES else "",
-        }
-        for item in topic_items
-    ]
-    if rows:
-        st.dataframe(rows, hide_index=True, width="stretch")
-
-    edited_workspace = st.text_area("research_workspace.md", value=workspace_text, height=520, key=f"workspace-editor:{selected_topic}")
-    save_columns = st.columns([1.0, 3.0])
-    if save_columns[0].button("保存 workspace", key="workspace-save"):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(edited_workspace, encoding="utf-8")
-        st.session_state["last_action_message"] = f"已保存：{path.as_posix()}"
-        rerun(st)
-    save_columns[1].caption("这个文件是讨论草稿。请保留 paper-supported / inferred / proposal / unsupported / needs-review 标签。")
-
-    with st.expander("生成给 LLM 的讨论提示词", expanded=False):
-        prompt = hub.build_topic_workspace_prompt(selected_topic, items, edited_workspace)
-        st.text_area("复制给 Codex / Kimi / ChatGPT 的提示词", value=prompt, height=360, key=f"workspace-prompt:{selected_topic}")
-
-    with st.expander("追加讨论记录", expanded=False):
-        discussion = st.text_area("本轮讨论结论或待办", height=160, key=f"workspace-discussion:{selected_topic}")
-        if st.button("追加到讨论记录", key="workspace-append-discussion", disabled=not discussion.strip()):
-            path.parent.mkdir(parents=True, exist_ok=True)
-            current = edited_workspace.rstrip()
-            addition = f"\n\n### {hub.now_iso()}\n\n{discussion.strip()}\n"
-            path.write_text(current + addition, encoding="utf-8")
-            st.session_state["last_action_message"] = f"已追加讨论记录：{path.as_posix()}"
-            rerun(st)
 
 
 def render_collect_tab(st) -> None:

@@ -13,6 +13,8 @@ def main() -> int:
     parser.add_argument("--from-notes", action="store_true", help="Scan item notes from data/items.jsonl.")
     parser.add_argument("--topic", default="all", help="Topic slug, or all.")
     parser.add_argument("--note", default="", help="Scan one note path.")
+    parser.add_argument("--providers", default="openalex,crossref,semantic_scholar", help="Metadata lookup providers for extracted papers, or none.")
+    parser.add_argument("--lookup-limit", type=int, default=3, help="Metadata lookup result limit per provider.")
     parser.add_argument("--dry-run", action="store_true", help="Print extracted items without writing.")
     args = parser.parse_args()
 
@@ -26,6 +28,9 @@ def main() -> int:
         return 1
 
     extracted = hub.extract_related_items_from_notes(items, topic=args.topic, note_path=note_path)
+    providers = [provider.strip() for provider in args.providers.split(",") if provider.strip()]
+    if providers != ["none"]:
+        extracted = hub.enrich_related_paper_metadata(extracted, providers=providers, lookup_limit=args.lookup_limit)
     print(f"Extracted related items: {len(extracted)}")
     for item in extracted:
         metadata = item.get("metadata") or {}

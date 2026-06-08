@@ -6,7 +6,7 @@
 
 - 自动收集低空通信、UAV 系统、标准、政策和产业相关信号；
 - 对你选中的 PDF 或条目生成中文阅读笔记；
-- 在 Topic Workspace 中基于已有 note 讨论研究认识、不确定信息和候选 idea；
+- 在 Topic Preview 中查看已有 note、社会/context 线索和推荐来源抽取结果；
 - 在材料足够时，按 topic 手动触发保守综合；
 - 保留清晰记录：收集了什么、读了什么、哪些仍需人工判断。
 
@@ -53,7 +53,7 @@ outputs/review_dashboard.md
 
 如果本地暂时没有安装 Streamlit，也可以先打开 `outputs/review_dashboard.md` 做人工浏览。
 
-GUI 里也可以直接运行情报收集、扫描本地 PDF、批量读取 PDF、处理 `needs_topic_review` 条目。自动收集在 GitHub Actions 中也有定时任务；本地按钮主要用于临时补跑。`复核条目` 会把论文、标准、政策、报告和产业信号放在一起处理，但每张卡片都会明确显示所属数据库和具体类型。`论文数据库` 只查询 paper；`社会数据库` 只查询 standard / policy / report / whitepaper / industry / news，并按文档可用性区分 direct PDF、网页正文、门户页、目录/付费入口和新闻门户。推荐顺序是：情报收集 -> 复核条目 -> Topic 审核 -> 批量读 PDF -> Topic Workspace -> 论文数据库 / 社会数据库。
+GUI 里也可以直接运行情报收集、扫描本地 PDF、批量读取 PDF、处理 `needs_topic_review` 条目。自动收集在 GitHub Actions 中也有定时任务；本地按钮主要用于临时补跑。`复核条目` 会把论文、标准、政策、报告和产业信号放在一起处理，但每张卡片都会明确显示所属数据库和具体类型。`论文数据库` 只查询 paper；`社会数据库` 只查询 standard / policy / report / whitepaper / industry / news，并按文档可用性区分 direct PDF、网页正文、门户页、目录/付费入口和新闻门户。推荐顺序是：情报收集 -> 复核条目 -> Topic 审核 -> PDF Inbox / 批量读 PDF -> Topic Preview -> 论文数据库 / 社会数据库。
 
 每个条目卡片里的 `编辑 metadata` 可以直接修改数据库字段，包括 title、year、venue、publisher、authors、DOI、URL、source type 和 abstract/snippet。保存后会重算 `authority`；如果该条目已有 note 或本地 PDF，文件名会按当前 metadata 同步更新。
 
@@ -104,22 +104,38 @@ python scripts/batch_read_pdfs.py --pdf-dir literature/inbox/papers --topic auto
 
 若标题、来源或年份包含 Windows 不允许的文件名字符，脚本会自动替换；item id 是规范文件名的一部分，用于避免重名覆盖。
 
-### 4. Topic Workspace
+### 4. 推荐来源抽取与 Topic Preview
 
-日常研究讨论优先使用 Streamlit 的 `Topic Workspace` tab。它会基于某个 topic 下已有 note 和社会数据库线索生成并维护：
+阅读笔记不再维护通用 `后续建议` 任务列表。Kimi note 应只在 `推荐入库条目` 里列出具体来源；如果没有具体来源，写 `needs-review: no concrete source identified.`。
+
+可以从已读 note 抽取具体来源并写回 `data/items.jsonl`：
+
+```powershell
+python scripts/extract_related_items.py --from-notes --topic all
+python scripts/extract_related_items.py --note "notes/items/<id>.md"
+```
+
+Streamlit 的 `Topic Preview` tab 会基于某个 topic 下已有 note、社会数据库线索和抽取出的 related items 生成只读预览：
 
 ```text
 topics/<topic>/research_workspace.md
 ```
 
-这个页面用于记录：
+它不是手动维护的任务/讨论文档，不包含路线卡、novelty claim 或最终研究方向。
 
-- `paper-supported`：已读来源明确支持的内容；
-- `inferred`：多条来源之间的谨慎归纳；
-- `proposal`：可能的论文 idea，必须写成问题形式；
-- `unsupported` / `needs-review`：尚未被材料支持或仍需核验的信息。
+如需进入 typed semantic gap discovery 的第一步，只抽取 research atoms，不生成 gap：
 
-Topic Workspace 是多轮讨论草稿，不是最终研究方向或 novelty claim。
+```powershell
+python scripts/extract_research_atoms.py --topic all
+python scripts/extract_research_atoms.py --topic remote_id_broadcast_capacity
+python scripts/extract_research_atoms.py --note "notes/items/<id>.md"
+```
+
+输出：
+
+```text
+data/research_atoms.jsonl
+```
 
 ### 5. 按需 topic synthesis
 
@@ -177,7 +193,7 @@ GUI 默认只暴露 `review_status` 的三个按钮，避免误把已经读过�
 
 状态记录在 `data/items.jsonl` 中。本地 Streamlit 面板用于日常标记；`outputs/review_dashboard.md` 用作无需安装依赖时的轻量 review 面板。
 
-每篇 note 的 `后续建议` 会进入 item metadata 的 `follow_up_actions` 列表。每条建议有 `open` / `done` / `skipped` 状态；GUI 条目卡片里可以逐条标记，默认收起，`outputs/review_dashboard.md` 会集中列出 `后续建议待处理`。
+每篇 note 的 `推荐入库条目` 可以通过 `scripts/extract_related_items.py` 或 GUI 的 Topic Preview 按钮转成 `related_item_extraction` 候选 item。泛化建议、继续分析、核验假设、补充背景等不会作为主流程任务维护。
 
 GUI 按钮含义：
 

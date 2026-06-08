@@ -12,6 +12,8 @@ python scripts/collect_weekly.py --topic all
 
 ```powershell
 python scripts/read_item.py "literature/inbox/papers/example.pdf"
+python scripts/read_item.py "literature/inbox/papers/example.pdf" --mode kimi --upgrade
+python scripts/read_item.py "literature/inbox/papers/example.pdf" --mode text-draft --force
 ```
 
 默认 `--topic auto`；无法可靠归类时进入 GUI 的 Topic 审核。
@@ -36,6 +38,20 @@ python scripts/batch_read_pdfs.py --pdf-dir literature/inbox/papers --topic auto
 
 ```powershell
 python scripts/synthesize_topic.py --topic remote_id
+```
+
+抽取 note 中的具体推荐来源：
+
+```powershell
+python scripts/extract_related_items.py --from-notes --topic all
+python scripts/extract_related_items.py --note "notes/items/<id>.md"
+```
+
+抽取 typed research atoms：
+
+```powershell
+python scripts/extract_research_atoms.py --topic all
+python scripts/extract_research_atoms.py --topic remote_id_broadcast_capacity
 ```
 
 验证：
@@ -64,7 +80,9 @@ outputs/review_dashboard.md
 topics/<topic>/research_workspace.md
 ```
 
-有 Streamlit 时优先用 `scripts/review_app.py` 标记状态；没有 Streamlit 时先看 Markdown dashboard。不要把机器摘要当最终结论。需要人工复核后再进入 topic synthesis。
+`research_workspace.md` 当前是 Topic Preview 的生成文件，不是手工维护的讨论区。它只用于查看 coverage、evidence base、social/context signals、extracted related items 和 synthesis readiness。
+
+有 Streamlit 时优先用 `scripts/review_app.py` 标记状态、处理 PDF Inbox、抽取推荐来源；没有 Streamlit 时先看 Markdown dashboard。不要把机器摘要当最终结论。需要人工复核后再进入 topic synthesis。
 
 GUI 的 `编辑 metadata` 会直接写回 `data/items.jsonl`。补全 publisher 或 venue 后，`authority` 会自动重算。
 
